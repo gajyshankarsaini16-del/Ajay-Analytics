@@ -1,0 +1,56 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Form {
+  id          String   @id @default(cuid())
+  title       String
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  fields      FormField[]
+  submissions FormSubmission[]
+}
+
+model FormField {
+  id         String  @id @default(cuid())
+  formId     String
+  type       String  // text, dropdown, multiple_choice, checkbox, rating, date, phone, email
+  label      String
+  required   Boolean @default(false)
+  options    String? // Stored as stringified JSON array
+  logic      String? // STored as stringified JSON: { action: 'show|hide', conditions: [...] }
+  validation String? // Stored as stringified JSON: { pattern: '...', min: 1, max: 10, message: '...' }
+  order      Int     @default(0)
+
+  form       Form    @relation(fields: [formId], references: [id], onDelete: Cascade)
+}
+
+model FormSubmission {
+  id          String   @id @default(cuid())
+  formId      String
+  submittedAt DateTime @default(now())
+  source      String?  @default("public") // public, manual, api
+  
+  // Stored as stringified JSON holding the answers Key-Value pairs
+  data        String   
+
+  form        Form     @relation(fields: [formId], references: [id], onDelete: Cascade)
+}
+
+model Dataset {
+  id          String   @id @default(cuid())
+  filename    String
+  uploadedAt  DateTime @default(now())
+  type        String?  // sales, leads, inventory, other
+  tags        String?  // Comma separated tags
+  
+  // Stored as stringified JSON array of rows
+  data        String
+}
