@@ -1,66 +1,86 @@
 'use client';
 
-import { useState, useRef } from 'react';
-import { 
-  FileText, TrendingUp, BarChart2, DollarSign, 
-  CheckCircle, PieChart, Info, Download, X, Loader2, ArrowRight, BrainCircuit, Sparkles
+import { useState, useEffect, useRef } from 'react';
+import {
+  FileText, BarChart2, Globe, Loader2, BrainCircuit,
+  Sparkles, Download, Filter, Calendar, Database, ClipboardList, RefreshCw, X
 } from 'lucide-react';
 import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
-import styles from './Reports.module.css';
 
-const REPORT_TYPES = [
-  { id: 'project', title: 'Project Report', desc: 'General executive summary of all data collections.', icon: <FileText size={24} /> },
-  { id: 'feasibility', title: 'Feasibility Report', desc: 'In-depth analysis of data health and decision viability.', icon: <Info size={24} /> },
-  { id: 'progress', title: 'Progress Report', desc: 'Timeline-based data growth and collection velocity metrics.', icon: <TrendingUp size={24} /> },
-  { id: 'research', title: 'Research/Analysis Report', desc: 'Detailed participant demographics and source diversification.', icon: <BarChart2 size={24} /> },
-  { id: 'final', title: 'Final Project Report', desc: 'Comprehensive end-of-lifecycle data wrap-up and summary.', icon: <CheckCircle size={24} /> },
-  { id: 'financial', title: 'Financial Report', desc: 'Automatic detection and aggregation of monetary fields.', icon: <DollarSign size={24} /> },
-  { id: 'evaluation', title: 'Evaluation Report', desc: 'Performance metrics and field-level accuracy benchmarks.', icon: <PieChart size={24} /> },
-  { id: 'conclusion', title: 'Conclusion & Suggestions', desc: 'Smart suggestions based on data gaps and trends.', icon: <ArrowRight size={24} /> }
+const TABS = [
+  { id: 'dataset',  label: 'Dataset Reports',  icon: <Database size={16} />,      desc: 'AI analysis of uploaded files' },
+  { id: 'form',     label: 'Form Reports',      icon: <ClipboardList size={16} />, desc: 'AI analysis of form responses' },
+  { id: 'overall',  label: 'Overall Report',    icon: <Globe size={16} />,         desc: 'Platform-wide executive summary' },
 ];
 
 export default function ReportsPage() {
-  const [selectedReport, setSelectedReport] = useState<string | null>(null);
-  const [reportData, setReportData] = useState<any>(null);
-  const [loading, setLoading] = useState(false);
-  
-  // AI States
-  const [aiSummary, setAiSummary] = useState<string | null>(null);
-  const [aiLoading, setAiLoading] = useState(false);
-
+  const [activeTab, setActiveTab]         = useState('dataset');
+  const [datasets, setDatasets]           = useState<any[]>([]);
+  const [forms, setForms]                 = useState<any[]>([]);
+  const [selectedDataset, setSelectedDataset] = useState('');
+  const [selectedForm, setSelectedForm]   = useState('');
+  const [dateFrom, setDateFrom]           = useState('');
+  const [dateTo, setDateTo]               = useState('');
+  const [report, setReport]               = useState<any>(null);
+  const [loading, setLoading]             = useState(false);
+  const [aiLoading, setAiLoading]         = useState(false);
+  const [aiAnalysis, setAiAnalysis]       = useState<string | null>(null);
   const reportRef = useRef<HTMLDivElement>(null);
 
-  const generateReport = async (type: string) => {
-    setSelectedReport(type);
+  useEffect(() => {
+    fetch('/api/datasets').then(r => r.json()).then(d => {
+      setDatasets(Array.isArray(d) ? d : []);
+      if (d.length > 0) setSelectedDataset(d[0].id);
+    }).catch(() => {});
+
+    fetch('/api/forms').then(r => r.json()).then(d => {
+      const arr = Array.isArray(d) ? d : (d.forms || []);
+      setForms(arr);
+      if (arr.length > 0) setSelectedForm(arr[0].id);
+    }).catch(() => {});
+  }, []);
+
+  const generateReport = async () => {
     setLoading(true);
-    setAiSummary(null); // Reset AI on new report
+    setReport(null);
+    setAiAnalysis(null);
+
     try {
-      const res = await fetch(`/api/reports/generate?type=${type}`);
-      if (!res.ok) throw new Error("Failed to generate report");
+      let url = `/api/reports/generate-v2?type=${activeTab}`;
+      if (activeTab === 'dataset' && selectedDataset) url += `&datasetId=${selectedDataset}`;
+      if (activeTab === 'form'    && selectedForm)    url += `&formId=${selectedForm}`;
+      if (dateFrom) url += `&from=${dateFrom}`;
+      if (dateTo)   url += `&to=${dateTo}`;
+
+      const res  = await fetch(url);
       const data = await res.json();
-      setReportData(data);
-    } catch (err) {
-      console.error(err);
+      if (!res.ok) throw new Error(data.error || 'Failed');
+      setReport(data);
+    } catch (e: any) {
+      alert('Error: ' + e.message);
     } finally {
       setLoading(false);
     }
   };
 
-  const generateAiReport = async () => {
-    if (!reportData) return;
+  const generateAI = async () => {
+    if (!report) return;
     setAiLoading(true);
     try {
-      const res = await fetch('/api/ai/analyze', {
-        method: 'POST',
+      const type = activeTab === 'dataset' ? 'dataset'
+                 : activeTab === 'form'    ? 'form_report'
+                 :                           'overall_report';
+      const res  = await fetch('/api/ai/analyze', {
+        method:  'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ type: 'report', context: { title: reportData.title, metrics: reportData.metrics, baseSummary: reportData.summary } })
+        body:    JSON.stringify({ type, context: report.context }),
       });
       const json = await res.json();
       if (json.error) throw new Error(json.error);
-      setAiSummary(json.analysis);
+      setAiAnalysis(json.analysis);
     } catch (e: any) {
-      alert("AI Error: " + e.message);
+      alert('AI Error: ' + e.message);
     } finally {
       setAiLoading(false);
     }
@@ -68,131 +88,235 @@ export default function ReportsPage() {
 
   const exportPDF = async () => {
     if (!reportRef.current) return;
-    try {
-      const canvas = await html2canvas(reportRef.current, {
-        scale: 2,
-        backgroundColor: '#09090b' // zinc-950
-      });
-      const imgData = canvas.toDataURL('image/png');
-      const pdf = new jsPDF('p', 'mm', 'a4');
-      const pdfWidth = pdf.internal.pageSize.getWidth();
-      const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
-      
-      pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
-      pdf.save(`DataCore-${selectedReport}-report.pdf`);
-    } catch (e) {
-      console.error('PDF generation failed', e);
-    }
+    const canvas = await html2canvas(reportRef.current, { scale: 2, backgroundColor: '#09090b' });
+    const img    = canvas.toDataURL('image/png');
+    const pdf    = new jsPDF('p', 'mm', 'a4');
+    const w      = pdf.internal.pageSize.getWidth();
+    pdf.addImage(img, 'PNG', 0, 0, w, (canvas.height * w) / canvas.width);
+    pdf.save(`DataCore-${activeTab}-report-${Date.now()}.pdf`);
   };
 
+  const card = (style?: any) => ({
+    background: 'rgba(255,255,255,0.03)',
+    border: '1px solid rgba(255,255,255,0.08)',
+    borderRadius: '12px',
+    padding: '1.5rem',
+    ...style,
+  });
+
   return (
-    <div className={styles.container}>
-      <div className={styles.header}>
-        <h1 className="page-title">Specialized Reports</h1>
-        <p className="page-subtitle">Select a template to generate professional data-driven reports in seconds.</p>
+    <div style={{ padding: '2rem', maxWidth: '1200px', margin: '0 auto' }}>
+
+      {/* Header */}
+      <div style={{ marginBottom: '2rem' }}>
+        <h1 style={{ fontSize: '1.75rem', fontWeight: 700, color: '#fff', margin: 0 }}>Smart Reports</h1>
+        <p style={{ color: 'rgba(255,255,255,0.5)', margin: '4px 0 0' }}>
+          AI-generated reports — by dataset, form, or platform-wide
+        </p>
       </div>
 
-      <div className={styles.reportGrid}>
-        {REPORT_TYPES.map(report => (
-          <div key={report.id} className={`${styles.reportCard} glass-panel`} onClick={() => generateReport(report.id)}>
-            <div className={styles.iconWrapper}>{report.icon}</div>
-            <h3>{report.title}</h3>
-            <p>{report.desc}</p>
-            <button className={`${styles.generateBtn} btn-secondary btn-sm`}>
-              Generate Report
-            </button>
-          </div>
+      {/* Tabs */}
+      <div style={{ display: 'flex', gap: '0.75rem', marginBottom: '1.5rem', flexWrap: 'wrap' }}>
+        {TABS.map(t => (
+          <button key={t.id} onClick={() => { setActiveTab(t.id); setReport(null); setAiAnalysis(null); }}
+            style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 20px',
+              borderRadius: '10px', border: '1px solid',
+              borderColor: activeTab === t.id ? '#6366f1' : 'rgba(255,255,255,0.1)',
+              background: activeTab === t.id ? 'rgba(99,102,241,0.15)' : 'none',
+              color: activeTab === t.id ? '#a5b4fc' : 'rgba(255,255,255,0.6)',
+              cursor: 'pointer', fontWeight: 600, fontSize: '0.875rem' }}>
+            {t.icon} {t.label}
+          </button>
         ))}
       </div>
 
-      {selectedReport && (
-        <div className={styles.previewOverlay}>
-          <div className={styles.previewContent}>
-            <div className={styles.previewHeader}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-                <FileText size={20} color="var(--primary-color)" />
-                <span style={{ fontWeight: 600 }}>Report Template Preview</span>
-              </div>
-              <div style={{ display: 'flex', gap: '1rem' }}>
-                {!loading && reportData && (
-                  <>
-                    <button 
-                      className="btn-secondary btn-sm" 
-                      onClick={generateAiReport} 
-                      disabled={aiLoading || aiSummary !== null} 
-                      style={{ borderColor: 'var(--primary-color)', color: 'var(--primary-color)' }}
-                    >
-                      {aiLoading ? <Loader2 size={16} className="spin" /> : <BrainCircuit size={16} />}
-                      {aiSummary ? 'AI Complete' : 'AI Analysis'}
-                    </button>
-                    <button className="btn-primary btn-sm" onClick={exportPDF}>
-                      <Download size={16} /> Export PDF
-                    </button>
-                  </>
-                )}
-                <button className={styles.closeBtn} onClick={() => { setSelectedReport(null); setReportData(null); setAiSummary(null); }}>
-                  <X size={24} />
-                </button>
-              </div>
+      {/* Filter Panel */}
+      <div style={{ ...card(), marginBottom: '1.5rem' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '1rem', color: 'rgba(255,255,255,0.7)' }}>
+          <Filter size={16} /> <strong>Filters</strong>
+        </div>
+        <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap', alignItems: 'flex-end' }}>
+
+          {/* Dataset/Form selector */}
+          {activeTab === 'dataset' && (
+            <div style={{ flex: 1, minWidth: '200px' }}>
+              <label style={{ display: 'block', fontSize: '0.75rem', color: 'rgba(255,255,255,0.4)', marginBottom: '6px' }}>
+                Select Dataset
+              </label>
+              <select value={selectedDataset} onChange={e => setSelectedDataset(e.target.value)}
+                style={{ width: '100%', padding: '10px 12px', background: 'rgba(0,0,0,0.3)',
+                  border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px', color: '#fff', fontSize: '0.875rem' }}>
+                {datasets.length === 0
+                  ? <option>No datasets uploaded</option>
+                  : datasets.map(d => <option key={d.id} value={d.id}>{d.filename}</option>)}
+              </select>
+            </div>
+          )}
+
+          {activeTab === 'form' && (
+            <div style={{ flex: 1, minWidth: '200px' }}>
+              <label style={{ display: 'block', fontSize: '0.75rem', color: 'rgba(255,255,255,0.4)', marginBottom: '6px' }}>
+                Select Form
+              </label>
+              <select value={selectedForm} onChange={e => setSelectedForm(e.target.value)}
+                style={{ width: '100%', padding: '10px 12px', background: 'rgba(0,0,0,0.3)',
+                  border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px', color: '#fff', fontSize: '0.875rem' }}>
+                {forms.length === 0
+                  ? <option>No forms created</option>
+                  : forms.map(f => <option key={f.id} value={f.id}>{f.title}</option>)}
+              </select>
+            </div>
+          )}
+
+          {/* Date range */}
+          <div>
+            <label style={{ display: 'block', fontSize: '0.75rem', color: 'rgba(255,255,255,0.4)', marginBottom: '6px' }}>
+              <Calendar size={12} style={{ display: 'inline', marginRight: '4px' }} />From Date
+            </label>
+            <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)}
+              style={{ padding: '10px 12px', background: 'rgba(0,0,0,0.3)',
+                border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px', color: '#fff', fontSize: '0.875rem' }} />
+          </div>
+          <div>
+            <label style={{ display: 'block', fontSize: '0.75rem', color: 'rgba(255,255,255,0.4)', marginBottom: '6px' }}>
+              <Calendar size={12} style={{ display: 'inline', marginRight: '4px' }} />To Date
+            </label>
+            <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)}
+              style={{ padding: '10px 12px', background: 'rgba(0,0,0,0.3)',
+                border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px', color: '#fff', fontSize: '0.875rem' }} />
+          </div>
+
+          {(dateFrom || dateTo) && (
+            <button onClick={() => { setDateFrom(''); setDateTo(''); }}
+              style={{ background: 'none', border: '1px solid rgba(255,255,255,0.1)', color: 'rgba(255,255,255,0.5)',
+                borderRadius: '8px', padding: '10px 12px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px' }}>
+              <X size={14} /> Clear
+            </button>
+          )}
+
+          {/* Generate button */}
+          <button onClick={generateReport} disabled={loading}
+            style={{ padding: '10px 24px', background: 'linear-gradient(135deg,#6366f1,#8b5cf6)',
+              border: 'none', borderRadius: '8px', color: '#fff', cursor: loading ? 'not-allowed' : 'pointer',
+              fontWeight: 600, display: 'flex', alignItems: 'center', gap: '8px',
+              opacity: loading ? 0.7 : 1, fontSize: '0.875rem' }}>
+            {loading ? <Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} /> : <BarChart2 size={16} />}
+            Generate Report
+          </button>
+        </div>
+      </div>
+
+      {/* Report Output */}
+      {loading && (
+        <div style={{ ...card(), display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1rem', padding: '4rem' }}>
+          <Loader2 size={40} style={{ animation: 'spin 1s linear infinite', color: '#6366f1' }} />
+          <p style={{ color: 'rgba(255,255,255,0.5)' }}>Generating report...</p>
+        </div>
+      )}
+
+      {report && !loading && (
+        <div>
+          {/* Action buttons */}
+          <div style={{ display: 'flex', gap: '1rem', marginBottom: '1rem', flexWrap: 'wrap' }}>
+            <button onClick={generateAI} disabled={aiLoading || !!aiAnalysis}
+              style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 20px',
+                background: 'rgba(99,102,241,0.15)', border: '1px solid #6366f1',
+                borderRadius: '8px', color: '#a5b4fc', cursor: aiLoading ? 'not-allowed' : 'pointer',
+                fontWeight: 600, fontSize: '0.875rem', opacity: aiLoading ? 0.7 : 1 }}>
+              {aiLoading ? <Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} /> : <BrainCircuit size={16} />}
+              {aiAnalysis ? 'AI Done ✓' : 'Generate AI Analysis'}
+            </button>
+            <button onClick={exportPDF}
+              style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 20px',
+                background: 'linear-gradient(135deg,#6366f1,#8b5cf6)', border: 'none',
+                borderRadius: '8px', color: '#fff', cursor: 'pointer', fontWeight: 600, fontSize: '0.875rem' }}>
+              <Download size={16} /> Export PDF
+            </button>
+          </div>
+
+          {/* Report content */}
+          <div ref={reportRef} style={{ ...card() }}>
+            {/* Report title */}
+            <div style={{ borderBottom: '1px solid rgba(255,255,255,0.07)', paddingBottom: '1rem', marginBottom: '1.5rem' }}>
+              <h2 style={{ color: '#fff', margin: 0, fontSize: '1.4rem' }}>{report.title}</h2>
+              <p style={{ color: 'rgba(255,255,255,0.4)', margin: '4px 0 0', fontSize: '0.8rem' }}>
+                Generated: {new Date(report.generatedAt).toLocaleString()}
+                {report.filters && ` · Filters: ${report.filters}`}
+              </p>
             </div>
 
-            <div className={styles.previewBody}>
-              {loading ? (
-                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1rem', marginTop: '100px' }}>
-                  <Loader2 size={40} className="spin" color="var(--primary-color)" />
-                  <p style={{ color: 'var(--text-secondary)' }}>Analyzing data engines and generating specialized metrics...</p>
+            {/* AI Analysis */}
+            {aiAnalysis && (
+              <div style={{ background: 'rgba(99,102,241,0.07)', border: '1px solid rgba(99,102,241,0.2)',
+                borderRadius: '12px', padding: '1.5rem', marginBottom: '1.5rem' }}>
+                <h3 style={{ color: '#a5b4fc', display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '1rem', margin: '0 0 1rem' }}>
+                  <Sparkles size={16} /> Gemini AI Analysis
+                </h3>
+                <div style={{ color: 'rgba(255,255,255,0.85)', lineHeight: 1.8, whiteSpace: 'pre-wrap', fontSize: '0.9rem' }}>
+                  {aiAnalysis}
                 </div>
-              ) : reportData && (
-                <div ref={reportRef} style={{ background: 'var(--bg-color)', width: '100%', padding: '2rem' }}>
-                  <div className={styles.reportTitle} style={{ marginBottom: '1rem' }}>{reportData.title}</div>
-                  <div className={styles.reportMeta} style={{ marginBottom: '2rem' }}>
-                    <span><strong>Generated:</strong> {new Date(reportData.generatedAt).toLocaleString()}</span>
-                    <span><strong>Project:</strong> DataCore Intelligence Platform</span>
-                  </div>
+              </div>
+            )}
 
-                  {aiSummary && (
-                    <div className={styles.summarySection} style={{ background: 'rgba(99, 102, 241, 0.05)', padding: '1.5rem', borderRadius: '12px', border: '1px solid rgba(99, 102, 241, 0.2)', marginBottom: '2rem' }}>
-                      <h4 style={{ color: 'var(--primary-color)', display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '1rem' }}>
-                        <Sparkles size={16} /> AI Executive Synthesis
-                      </h4>
-                      <div style={{ color: 'var(--text-primary)', lineHeight: 1.6, whiteSpace: 'pre-wrap', fontSize: '1.05rem' }}>
-                        {aiSummary}
-                      </div>
+            {/* KPI metrics */}
+            {report.metrics?.length > 0 && (
+              <div style={{ marginBottom: '1.5rem' }}>
+                <h3 style={{ color: 'rgba(255,255,255,0.7)', fontSize: '0.85rem', textTransform: 'uppercase',
+                  letterSpacing: '0.08em', marginBottom: '1rem' }}>Key Metrics</h3>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '1rem' }}>
+                  {report.metrics.map((m: any, i: number) => (
+                    <div key={i} style={{ background: 'rgba(255,255,255,0.04)', borderRadius: '10px', padding: '1rem' }}>
+                      <p style={{ margin: 0, fontSize: '0.7rem', color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase' }}>{m.label}</p>
+                      <p style={{ margin: '4px 0 0', fontSize: '1.4rem', fontWeight: 700, color: '#a5b4fc' }}>{m.value}</p>
                     </div>
-                  )}
+                  ))}
+                </div>
+              </div>
+            )}
 
-                  <div className={styles.summarySection}>
-                    <h4>System Summary</h4>
-                    <p style={{ color: 'var(--text-primary)', fontSize: '1.1rem', lineHeight: 1.6 }}>
-                      {reportData.summary}
-                    </p>
-                  </div>
+            {/* Summary */}
+            {report.summary && (
+              <div style={{ marginBottom: '1.5rem' }}>
+                <h3 style={{ color: 'rgba(255,255,255,0.7)', fontSize: '0.85rem', textTransform: 'uppercase',
+                  letterSpacing: '0.08em', marginBottom: '0.75rem' }}>Summary</h3>
+                <p style={{ color: 'rgba(255,255,255,0.8)', lineHeight: 1.7, margin: 0 }}>{report.summary}</p>
+              </div>
+            )}
 
-                  <div className={styles.summarySection}>
-                    <h4>Key Performance Metrics</h4>
-                    <div className={styles.metricsGrid}>
-                      {reportData.metrics.map((m: any, idx: number) => (
-                        <div key={idx} className={styles.metricItem}>
-                          <span className={styles.metricLabel}>{m.label}</span>
-                          <span className={styles.metricValue}>{m.value}</span>
-                        </div>
+            {/* Details table */}
+            {report.details?.length > 0 && (
+              <div>
+                <h3 style={{ color: 'rgba(255,255,255,0.7)', fontSize: '0.85rem', textTransform: 'uppercase',
+                  letterSpacing: '0.08em', marginBottom: '0.75rem' }}>Details</h3>
+                <div style={{ overflowX: 'auto' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
+                    <thead>
+                      <tr>
+                        {Object.keys(report.details[0]).map(k => (
+                          <th key={k} style={{ padding: '8px 12px', textAlign: 'left', color: 'rgba(255,255,255,0.4)',
+                            borderBottom: '1px solid rgba(255,255,255,0.07)', fontSize: '0.75rem', textTransform: 'uppercase' }}>{k}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {report.details.map((row: any, i: number) => (
+                        <tr key={i} style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
+                          {Object.values(row).map((v: any, j) => (
+                            <td key={j} style={{ padding: '10px 12px', color: 'rgba(255,255,255,0.75)' }}>{String(v)}</td>
+                          ))}
+                        </tr>
                       ))}
-                    </div>
-                  </div>
-
-                  <div className={styles.summarySection}>
-                    <h4>Detailed Analytics visualization</h4>
-                    <div className={styles.placeholder}>
-                      Dynamic Chart Visualization (Included in PDF Export)
-                    </div>
-                  </div>
-
-                  <div className={styles.reportFooter}>
-                    <span>DataCore Professional Reporting Standard v1.2</span>
-                    <span>Page 1 of 1</span>
-                  </div>
+                    </tbody>
+                  </table>
                 </div>
-              )}
+              </div>
+            )}
+
+            {/* Footer */}
+            <div style={{ marginTop: '2rem', paddingTop: '1rem', borderTop: '1px solid rgba(255,255,255,0.07)',
+              display: 'flex', justifyContent: 'space-between', color: 'rgba(255,255,255,0.3)', fontSize: '0.75rem' }}>
+              <span>DataCore Intelligence Platform</span>
+              <span>Powered by Gemini AI</span>
             </div>
           </div>
         </div>
