@@ -67,7 +67,7 @@ export default function Sidebar() {
           })}
         </nav>
 
-        <div className={styles.footer}>
+        <div className={styles.footer}><button onClick={async()=>{await fetch("/api/auth/logout",{method:"POST"});window.location.href="/login"}} style={{display:"flex",alignItems:"center",gap:"8px",width:"100%",padding:"10px 12px",background:"rgba(244,63,94,0.1)",border:"1px solid rgba(244,63,94,0.2)",borderRadius:"8px",color:"#fb7185",cursor:"pointer",fontSize:"0.85rem",fontWeight:600}}>Logout</button><p>Personal Workspace</p>
           <p>Personal Workspace</p>
         </div>
       </aside>
