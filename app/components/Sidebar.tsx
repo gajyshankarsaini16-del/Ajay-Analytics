@@ -2,35 +2,35 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { 
-  BarChart3, 
-  Upload, 
-  FileText, 
-  MessageSquare, 
-  Keyboard, 
-  Layers,
-  ClipboardList,
-  Menu,
-  X
+  BarChart3, Upload, FileText, MessageSquare, 
+  Keyboard, Layers, ClipboardList, Menu, X, LogOut
 } from 'lucide-react';
 import styles from './Sidebar.module.css';
 
 const navItems = [
-  { href: '/', label: 'Dashboard', icon: Layers },
-  { href: '/upload', label: 'Upload Data', icon: Upload },
-  { href: '/forms', label: 'Form Builder', icon: FileText },
-  { href: '/responses', label: 'Responses', icon: MessageSquare },
-  { href: '/manual', label: 'Manual Entry', icon: Keyboard },
-  { href: '/analytics', label: 'Analytics', icon: BarChart3 },
-  { href: '/reports', label: 'Reports', icon: ClipboardList },
+  { href: '/',          label: 'Dashboard',    icon: Layers },
+  { href: '/upload',    label: 'Upload Data',  icon: Upload },
+  { href: '/forms',     label: 'Form Builder', icon: FileText },
+  { href: '/responses', label: 'Responses',    icon: MessageSquare },
+  { href: '/manual',    label: 'Manual Entry', icon: Keyboard },
+  { href: '/analytics', label: 'Analytics',    icon: BarChart3 },
+  { href: '/reports',   label: 'Reports',      icon: ClipboardList },
 ];
 
 export default function Sidebar() {
   const pathname = usePathname();
+  const router   = useRouter();
   const [isOpen, setIsOpen] = useState(false);
 
   const toggleSidebar = () => setIsOpen(!isOpen);
+
+  const handleLogout = async () => {
+    await fetch('/api/auth/logout', { method: 'POST' });
+    router.push('/login');
+    router.refresh();
+  };
 
   return (
     <>
@@ -67,7 +67,21 @@ export default function Sidebar() {
           })}
         </nav>
 
-        <div className={styles.footer}><button onClick={async()=>{await fetch("/api/auth/logout",{method:"POST"});window.location.href="/login"}} style={{display:"flex",alignItems:"center",gap:"8px",width:"100%",padding:"10px 12px",background:"rgba(244,63,94,0.1)",border:"1px solid rgba(244,63,94,0.2)",borderRadius:"8px",color:"#fb7185",cursor:"pointer",fontSize:"0.85rem",fontWeight:600}}>Logout</button><p>Personal Workspace</p>
+        <div className={styles.footer}>
+          <button
+            onClick={handleLogout}
+            style={{
+              display: 'flex', alignItems: 'center', gap: '10px',
+              width: '100%', padding: '10px 14px',
+              background: 'rgba(244,63,94,0.08)',
+              border: '1px solid rgba(244,63,94,0.2)',
+              borderRadius: '10px', color: '#fb7185',
+              cursor: 'pointer', fontSize: '0.875rem', fontWeight: 600,
+              marginBottom: '0.75rem', transition: 'all 0.2s',
+            }}
+          >
+            <LogOut size={16} /> Logout
+          </button>
           <p>Personal Workspace</p>
         </div>
       </aside>
