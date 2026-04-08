@@ -208,10 +208,9 @@ export default function AnalyticsPage() {
     try {
       const r = await fetch(`/api/analytics/questions?formId=${id}`);
       setFormData(await r.json());
-   } catch (e: any) { 
-  console.error('Dataset load error:', e);
-  alert('Dataset load failed: ' + e.message);
-} finally { setLoading(false); }
+    } catch {}
+    finally { setLoading(false); }
+  };
 
   const loadDatasetAnalytics = async (id: string) => {
     if (!id) return;
@@ -226,9 +225,11 @@ export default function AnalyticsPage() {
       try {
         const rows = JSON.parse(d2.data || '[]');
         setRawRows(Array.isArray(rows) ? rows : []);
-     } catch (e: any) { 
-      alert('Dataset load failed: ' + e.message);  
-    } finally { setLoading(false); }
+      } catch {}
+    } catch {}
+    finally { setLoading(false); }
+  };
+
   const generateAI = async () => {
     setAiLoading(true); setAiText(null);
     try {
