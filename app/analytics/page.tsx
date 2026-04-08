@@ -220,7 +220,7 @@ export default function AnalyticsPage() {
       overview.recentForms.forEach((f: any) => { rows.push([f.title, f._count.submissions, new Date(f.createdAt).toLocaleDateString()]); });
     }
     if (rows.length === 0) { alert("No data to export"); return; }
-    const csv = rows.map(r => r.map(v => `"${String(v).replace(/"/g, """")}"` ).join(",")).join("\n");
+    const csv = rows.map(r => r.map(v => '"' + String(v).replace(/"/g, '""') + '"').join(',')).join('\n');
     const blob = new Blob([csv], { type: "text/csv" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
