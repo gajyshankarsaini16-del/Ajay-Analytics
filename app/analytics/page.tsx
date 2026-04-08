@@ -227,8 +227,6 @@ export default function AnalyticsPage() {
         const rows = JSON.parse(d2.data || '[]');
         setRawRows(Array.isArray(rows) ? rows : []);
      } catch (e: any) { 
-      alert('Dataset load failed: ' + e.message);
-    } catch (e: any) {
       alert('Dataset load failed: ' + e.message);  
     } finally { setLoading(false); }
   const generateAI = async () => {
