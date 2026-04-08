@@ -1,23 +1,7 @@
 {
   "functions": {
     "app/api/datasets/route.ts": { "maxDuration": 30 },
-    "app/api/analytics/**":      { "maxDuration": 30 },
-    "app/api/reports/**":        { "maxDuration": 30 }
-  },
-  "headers": [
-    {
-      "source": "/f/(.*)",
-      "headers": [
-        { "key": "Cache-Control", "value": "public, max-age=0, must-revalidate" }
-      ]
-    },
-    
-    {
-      "source": "/api/(.*)",
-      "headers": [
-        { "key": "Access-Control-Allow-Origin",  "value": "*" },
-        { "key": "Access-Control-Allow-Methods", "value": "GET, POST, PUT, DELETE, OPTIONS" }
-      ]
-    }
-  ],
+    "app/api/analytics/**": { "maxDuration": 30 },
+    "app/api/reports/**": { "maxDuration": 30 }
+  }
 }
