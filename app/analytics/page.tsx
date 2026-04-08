@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import {
   BarChart, Bar, PieChart, Pie, Cell, LineChart, Line, ScatterChart, Scatter,
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, ReferenceLine
@@ -8,7 +8,7 @@ import {
 import {
   ClipboardList, Database, Globe, Loader2, BrainCircuit,
   Sparkles, RefreshCw, TrendingUp, TrendingDown, AlertCircle,
-  CheckCircle, ChevronDown, ChevronUp, Activity, GitBranch, Download, FileDown
+  CheckCircle, ChevronDown, ChevronUp, Activity, GitBranch
 } from 'lucide-react';
 
 const COLORS = ['#6366f1','#10b981','#f59e0b','#ec4899','#8b5cf6','#06b6d4','#f97316','#84cc16'];
@@ -179,54 +179,6 @@ export default function AnalyticsPage() {
   const [corrB, setCorrB]         = useState('');
   const [mounted, setMounted]     = useState(false);
   const [trendDays, setTrendDays] = useState(30);
-  const analyticsRef = useRef<HTMLDivElement>(null);
-
-  const downloadPDF = async () => {
-    if (!analyticsRef.current) return;
-    try {
-      const html2canvas = (await import("html2canvas")).default;
-      const jsPDF = (await import("jspdf")).default;
-      const canvas = await html2canvas(analyticsRef.current, { scale: 2, backgroundColor: "#09090b", useCORS: true });
-      const img  = canvas.toDataURL("image/png");
-      const pdf  = new jsPDF("p", "mm", "a4");
-      const w    = pdf.internal.pageSize.getWidth();
-      const h    = pdf.internal.pageSize.getHeight();
-      const imgH = (canvas.height * w) / canvas.width;
-      let pos = 0;
-      while (pos < imgH) {
-        pdf.addImage(img, "PNG", 0, -pos, w, imgH);
-        pos += h;
-        if (pos < imgH) pdf.addPage();
-      }
-      const name = tab === "forms" ? (formData?.formTitle || "form-analytics") : tab === "datasets" ? (datasetData?.filename || "dataset-analytics") : "platform-overview";
-      pdf.save(name + "_analytics_" + new Date().toISOString().split("T")[0] + ".pdf");
-    } catch (e: any) { alert("PDF Error: " + e.message); }
-  };
-
-  const downloadCSV = () => {
-    let rows: string[][] = [];
-    let filename = "analytics";
-    if (tab === "forms" && formData?.questions) {
-      filename = formData.formTitle || "form-analytics";
-      rows = [["Question","Type","Total Answers","Top Answer","Top Count"]];
-      formData.questions.forEach((q: any) => { const top = q.chartData?.[0]; rows.push([q.label, q.type, q.totalAnswers, top?.name||"", top?.value||""]); });
-    } else if (tab === "datasets" && datasetData?.columns) {
-      filename = datasetData.filename || "dataset-analytics";
-      rows = [["Column","Type","Min","Max","Mean","Median","Std Dev","Unique Count"]];
-      datasetData.columns.forEach((c: any) => { rows.push([c.name, c.type, c.min??"", c.max??"", c.mean??"", c.median??"", c.std??"", c.uniqueCount??""]); });
-    } else if (tab === "overview" && overview?.recentForms) {
-      filename = "platform-overview";
-      rows = [["Form","Submissions","Created"]];
-      overview.recentForms.forEach((f: any) => { rows.push([f.title, f._count.submissions, new Date(f.createdAt).toLocaleDateString()]); });
-    }
-    if (rows.length === 0) { alert("No data to export"); return; }
-    const csv = rows.map(r => r.map(v => '"' + String(v).replace(/"/g, '""') + '"').join(',')).join('\n');
-    const blob = new Blob([csv], { type: "text/csv" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url; a.download = filename + "_" + new Date().toISOString().split("T")[0] + ".csv";
-    a.click(); URL.revokeObjectURL(url);
-  };
 
   useEffect(() => {
     setMounted(true);
@@ -401,7 +353,7 @@ export default function AnalyticsPage() {
                         <ResponsiveContainer width="100%" height={200}>
                           <BarChart data={q.chartData} layout="vertical">
                             <XAxis type="number" stroke="#a1a1aa" fontSize={11} allowDecimals={false} />
-                            <YAxis type="category" dataKey="name" stroke="#a1a1aa" fontSize={11} width={90} />
+                            <YAxis type="category" dataKey="name" stroke="#a1a1aa" fontSize={11} width={160} tick={{ fontSize: 11 }} />
                             <Tooltip contentStyle={{ backgroundColor: '#18181b', borderColor: 'rgba(255,255,255,0.1)', borderRadius: '8px' }} />
                             <Bar dataKey="value" radius={[0,6,6,0]}>
                               {q.chartData.map((_: any, i: number) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
@@ -686,13 +638,13 @@ export default function AnalyticsPage() {
                           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
                             <div>
                               <p style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.4)', marginBottom: '0.5rem' }}>Top Values</p>
-                              <ResponsiveContainer width="100%" height={180}>
-                                <BarChart data={col.topValues?.slice(0,8)} layout="vertical">
+                              <ResponsiveContainer width="100%" height={Math.max(180, (col.topValues?.length || 8) * 28)}>
+                                <BarChart data={col.topValues?.slice(0,15)} layout="vertical">
                                   <XAxis type="number" stroke="#a1a1aa" fontSize={10} allowDecimals={false} />
-                                  <YAxis type="category" dataKey="name" stroke="#a1a1aa" fontSize={10} width={80} />
+                                  <YAxis type="category" dataKey="name" stroke="#a1a1aa" fontSize={10} width={160} tick={{ fontSize: 10 }} />
                                   <Tooltip contentStyle={{ backgroundColor:'#18181b', borderColor:'rgba(255,255,255,0.1)', borderRadius:'8px' }} />
                                   <Bar dataKey="value" radius={[0,4,4,0]}>
-                                    {col.topValues?.slice(0,8).map((_:any,i:number)=><Cell key={i} fill={COLORS[i%COLORS.length]} />)}
+                                    {col.topValues?.slice(0,15).map((_:any,i:number)=><Cell key={i} fill={COLORS[i%COLORS.length]} />)}
                                   </Bar>
                                 </BarChart>
                               </ResponsiveContainer>
@@ -952,29 +904,11 @@ export default function AnalyticsPage() {
 
   return (
     <div style={{ padding: '1.5rem', maxWidth: '1200px', margin: '0 auto', width: '100%', boxSizing: 'border-box' }}>
-      <div style={{ marginBottom: '1.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '1rem' }}>
-        <div>
-          <h1 style={{ fontSize: '1.6rem', fontWeight: 700, color: '#fff', margin: 0 }}>Analytics</h1>
-          <p style={{ color: 'rgba(255,255,255,0.45)', margin: '4px 0 0', fontSize: '0.875rem' }}>
-            Trend analysis, segmentation, correlation & AI insights
-          </p>
-        </div>
-        {(formData || datasetData || overview) && (
-          <div style={{ display: 'flex', gap: '8px' }}>
-            <button onClick={downloadCSV}
-              style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '9px 18px',
-                background: 'rgba(16,185,129,0.15)', border: '1px solid rgba(16,185,129,0.4)',
-                borderRadius: '10px', color: '#10b981', cursor: 'pointer', fontWeight: 600, fontSize: '0.82rem' }}>
-              <FileDown size={15} /> CSV
-            </button>
-            <button onClick={downloadPDF}
-              style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '9px 18px',
-                background: 'linear-gradient(135deg,#6366f1,#8b5cf6)', border: 'none',
-                borderRadius: '10px', color: '#fff', cursor: 'pointer', fontWeight: 600, fontSize: '0.82rem' }}>
-              <Download size={15} /> PDF
-            </button>
-          </div>
-        )}
+      <div style={{ marginBottom: '1.5rem' }}>
+        <h1 style={{ fontSize: '1.6rem', fontWeight: 700, color: '#fff', margin: 0 }}>Analytics</h1>
+        <p style={{ color: 'rgba(255,255,255,0.45)', margin: '4px 0 0', fontSize: '0.875rem' }}>
+          Trend analysis, segmentation, correlation & AI insights
+        </p>
       </div>
 
       {/* Main Tabs */}
@@ -996,11 +930,9 @@ export default function AnalyticsPage() {
         ))}
       </div>
 
-      <div ref={analyticsRef}>
-        {tab === 'forms'    && renderForms()}
-        {tab === 'datasets' && renderDatasets()}
-        {tab === 'overview' && renderOverview()}
-      </div>
+      {tab === 'forms'    && renderForms()}
+      {tab === 'datasets' && renderDatasets()}
+      {tab === 'overview' && renderOverview()}
 
       <style>{`@keyframes spin { from{transform:rotate(0deg)} to{transform:rotate(360deg)} }`}</style>
     </div>
