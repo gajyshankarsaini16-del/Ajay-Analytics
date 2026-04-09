@@ -3,12 +3,17 @@ import { NextResponse } from 'next/server';
 
 export async function POST(request: Request) {
   try {
-    const { context, type } = await request.json();
+    const { context, type, query } = await request.json();
 
     let systemPrompt = '';
     let userPrompt = '';
 
-    if (type === 'dataset') {
+    // If a custom query is provided, use it directly with the data context
+    if (query && query.trim()) {
+      systemPrompt = `You are a senior data analyst. Answer the user's specific question about their data clearly and concisely. Use actual numbers from the context. Format with markdown where helpful.`;
+      userPrompt = `User question: "${query}"\n\nData context:\n${JSON.stringify(context, null, 2)}\n\nAnswer the question specifically using the data above.`;
+
+    } else if (type === 'dataset') {
       systemPrompt = `You are a senior data scientist providing professional dataset analysis reports. 
 Be specific, use actual numbers from the data, and provide actionable insights. 
 Format with clear sections using markdown. Keep it concise but impactful.`;
