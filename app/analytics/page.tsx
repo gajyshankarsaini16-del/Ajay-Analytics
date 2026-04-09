@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import {
   BarChart, Bar, PieChart, Pie, Cell, LineChart, Line, ScatterChart, Scatter,
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, ReferenceLine
@@ -8,7 +8,7 @@ import {
 import {
   ClipboardList, Database, Globe, Loader2, BrainCircuit,
   Sparkles, RefreshCw, TrendingUp, TrendingDown, AlertCircle,
-  CheckCircle, ChevronDown, ChevronUp, Activity, GitBranch
+  CheckCircle, ChevronDown, ChevronUp, Activity, GitBranch, Download, FileDown
 } from 'lucide-react';
 
 const COLORS = ['#6366f1','#10b981','#f59e0b','#ec4899','#8b5cf6','#06b6d4','#f97316','#84cc16'];
@@ -174,11 +174,60 @@ export default function AnalyticsPage() {
   const [loading, setLoading]     = useState(false);
   const [aiText, setAiText]       = useState<string | null>(null);
   const [aiLoading, setAiLoading] = useState(false);
-  const [expandedCol, setExpandedCol] = useState<string | null>(null);
+  const [expandedCols, setExpandedCols] = useState<Set<string>>(new Set());
   const [corrA, setCorrA]         = useState('');
   const [corrB, setCorrB]         = useState('');
   const [mounted, setMounted]     = useState(false);
   const [trendDays, setTrendDays] = useState(30);
+  const [aiQuery, setAiQuery]     = useState('');
+  const analyticsRef = useRef<HTMLDivElement>(null);
+
+  const downloadPDF = async () => {
+    if (!analyticsRef.current) return;
+    try {
+      const html2canvas = (await import("html2canvas")).default;
+      const jsPDF = (await import("jspdf")).default;
+      const canvas = await html2canvas(analyticsRef.current, { scale: 2, backgroundColor: "#09090b", useCORS: true });
+      const img  = canvas.toDataURL("image/png");
+      const pdf  = new jsPDF("p", "mm", "a4");
+      const w    = pdf.internal.pageSize.getWidth();
+      const h    = pdf.internal.pageSize.getHeight();
+      const imgH = (canvas.height * w) / canvas.width;
+      let pos = 0;
+      while (pos < imgH) {
+        pdf.addImage(img, "PNG", 0, -pos, w, imgH);
+        pos += h;
+        if (pos < imgH) pdf.addPage();
+      }
+      const name = tab === "forms" ? (formData?.formTitle || "form-analytics") : tab === "datasets" ? (datasetData?.filename || "dataset-analytics") : "platform-overview";
+      pdf.save(name + "_analytics_" + new Date().toISOString().split("T")[0] + ".pdf");
+    } catch (e: any) { alert("PDF Error: " + e.message); }
+  };
+
+  const downloadCSV = () => {
+    let rows: string[][] = [];
+    let filename = "analytics";
+    if (tab === "forms" && formData?.questions) {
+      filename = formData.formTitle || "form-analytics";
+      rows = [["Question","Type","Total Answers","Top Answer","Top Count"]];
+      formData.questions.forEach((q: any) => { const top = q.chartData?.[0]; rows.push([q.label, q.type, q.totalAnswers, top?.name||"", top?.value||""]); });
+    } else if (tab === "datasets" && datasetData?.columns) {
+      filename = datasetData.filename || "dataset-analytics";
+      rows = [["Column","Type","Min","Max","Mean","Median","Std Dev","Unique Count"]];
+      datasetData.columns.forEach((c: any) => { rows.push([c.name, c.type, c.min??"", c.max??"", c.mean??"", c.median??"", c.std??"", c.uniqueCount??""]); });
+    } else if (tab === "overview" && overview?.recentForms) {
+      filename = "platform-overview";
+      rows = [["Form","Submissions","Created"]];
+      overview.recentForms.forEach((f: any) => { rows.push([f.title, f._count.submissions, new Date(f.createdAt).toLocaleDateString()]); });
+    }
+    if (rows.length === 0) { alert("No data to export"); return; }
+    const csv = rows.map(r => r.map(v => '"' + String(v).replace(/"/g, '""') + '"').join(',')).join('\n');
+    const blob = new Blob([csv], { type: "text/csv" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url; a.download = filename + "_" + new Date().toISOString().split("T")[0] + ".csv";
+    a.click(); URL.revokeObjectURL(url);
+  };
 
   useEffect(() => {
     setMounted(true);
@@ -215,10 +264,15 @@ export default function AnalyticsPage() {
   const loadDatasetAnalytics = async (id: string) => {
     if (!id) return;
     setLoading(true); setDatasetData(null); setRawRows([]); setAiText(null); setSubTab('summary');
+    setExpandedCols(new Set()); // reset, will auto-expand after load
     try {
       const r = await fetch(`/api/datasets/${id}/analytics`);
       const d = await r.json();
       setDatasetData(d);
+      // Auto-expand ALL columns
+      if (d.columns) {
+        setExpandedCols(new Set(d.columns.map((c: any) => c.name)));
+      }
       // Also fetch raw rows for correlation scatter
       const r2 = await fetch(`/api/datasets/${id}`);
       const d2 = await r2.json();
@@ -230,19 +284,20 @@ export default function AnalyticsPage() {
     finally { setLoading(false); }
   };
 
-  const generateAI = async () => {
+  const generateAI = async (customQuery?: string) => {
     setAiLoading(true); setAiText(null);
     try {
       const type = tab === 'forms' ? 'form_report' : tab === 'datasets' ? 'dataset' : 'overall_report';
       const context = tab === 'forms' ? formData : tab === 'datasets' ? datasetData : overview;
+      const query = customQuery || aiQuery || undefined;
       const r = await fetch('/api/ai/analyze', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ type, context })
+        body: JSON.stringify({ type, context, query })
       });
       const d = await r.json();
       if (d.error) throw new Error(d.error);
       setAiText(d.analysis);
-    } catch (e: any) { alert('AI Error: ' + e.message); }
+    } catch (e: any) { alert('AI Error: ' + (e as any).message); }
     finally { setAiLoading(false); }
   };
 
@@ -500,26 +555,45 @@ export default function AnalyticsPage() {
           {/* AI sub-tab */}
           {subTab === 'ai' && (
             <Card>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1rem' }}>
-                <h3 style={{ color: '#a5b4fc', display: 'flex', alignItems: 'center', gap: '8px', margin: 0 }}>
-                  <BrainCircuit size={16} /> AI Analysis
+              <div style={{ marginBottom: '1.25rem' }}>
+                <h3 style={{ color: '#a5b4fc', display: 'flex', alignItems: 'center', gap: '8px', margin: '0 0 1rem' }}>
+                  <BrainCircuit size={16} /> AI Insights — Ask Anything
                 </h3>
-                <button onClick={generateAI} disabled={aiLoading}
-                  style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 18px',
-                    background: 'rgba(99,102,241,0.2)', border: '1px solid #6366f1',
-                    borderRadius: '8px', color: '#a5b4fc', cursor: 'pointer', fontSize: '0.85rem', fontWeight: 600 }}>
-                  {aiLoading ? <Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} /> : <Sparkles size={14} />}
-                  {aiText ? 'Regenerate' : 'Generate'}
-                </button>
+                <div style={{ display: 'flex', gap: '10px', alignItems: 'stretch' }}>
+                  <input
+                    type="text"
+                    value={aiQuery}
+                    onChange={e => setAiQuery(e.target.value)}
+                    onKeyDown={e => e.key === 'Enter' && !aiLoading && aiQuery.trim() && generateAI()}
+                    placeholder="e.g. What are the top trends in responses? Which option is most popular?"
+                    style={{ flex: 1, padding: '10px 14px', background: 'rgba(0,0,0,0.35)',
+                      border: '1px solid rgba(99,102,241,0.35)', borderRadius: '10px', color: '#fff',
+                      fontSize: '0.875rem', outline: 'none' }}
+                  />
+                  <button onClick={() => generateAI()} disabled={aiLoading || !aiQuery.trim()}
+                    style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 20px',
+                      background: aiQuery.trim() ? 'linear-gradient(135deg,#6366f1,#8b5cf6)' : 'rgba(99,102,241,0.15)',
+                      border: '1px solid #6366f1', borderRadius: '10px', color: aiQuery.trim() ? '#fff' : '#a5b4fc',
+                      cursor: aiLoading || !aiQuery.trim() ? 'not-allowed' : 'pointer',
+                      fontSize: '0.875rem', fontWeight: 600, opacity: aiLoading ? 0.7 : 1, whiteSpace: 'nowrap' }}>
+                    {aiLoading ? <Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} /> : <Sparkles size={14} />}
+                    {aiLoading ? 'Analyzing...' : 'Ask AI'}
+                  </button>
+                </div>
+                <p style={{ margin: '6px 0 0', fontSize: '0.75rem', color: 'rgba(255,255,255,0.3)' }}>
+                  Type your question and press Enter or click Ask AI
+                </p>
               </div>
               {aiText ? (
-                <div style={{ color: 'rgba(255,255,255,0.82)', lineHeight: 1.8, whiteSpace: 'pre-wrap', fontSize: '0.9rem' }}>
+                <div style={{ borderTop: '1px solid rgba(255,255,255,0.07)', paddingTop: '1.25rem',
+                  color: 'rgba(255,255,255,0.82)', lineHeight: 1.8, whiteSpace: 'pre-wrap', fontSize: '0.9rem' }}>
                   {aiText}
                 </div>
-              ) : (
-                <p style={{ color: 'rgba(255,255,255,0.35)', fontSize: '0.9rem', textAlign: 'center', padding: '2rem' }}>
-                  Click "Generate" to get Claude AI insights on this form's data.
-                </p>
+              ) : !aiLoading && (
+                <div style={{ textAlign: 'center', padding: '2rem', color: 'rgba(255,255,255,0.25)', fontSize: '0.9rem' }}>
+                  <BrainCircuit size={32} style={{ marginBottom: '0.75rem', opacity: 0.3 }} />
+                  <p style={{ margin: 0 }}>Type a question above to get AI insights on this form's data</p>
+                </div>
               )}
             </Card>
           )}
@@ -584,11 +658,28 @@ export default function AnalyticsPage() {
           {/* Column Summary */}
           {subTab === 'summary' && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+              {/* Expand/Collapse All */}
+              <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
+                <button onClick={() => setExpandedCols(new Set(datasetData.columns?.map((c: any) => c.name) || []))}
+                  style={{ padding: '5px 14px', background: 'rgba(99,102,241,0.15)', border: '1px solid rgba(99,102,241,0.3)',
+                    borderRadius: '8px', color: '#a5b4fc', cursor: 'pointer', fontSize: '0.78rem' }}>
+                  Expand All
+                </button>
+                <button onClick={() => setExpandedCols(new Set())}
+                  style={{ padding: '5px 14px', background: 'none', border: '1px solid rgba(255,255,255,0.1)',
+                    borderRadius: '8px', color: 'rgba(255,255,255,0.5)', cursor: 'pointer', fontSize: '0.78rem' }}>
+                  Collapse All
+                </button>
+              </div>
               {datasetData.columns?.map((col: any, idx: number) => {
-                const isExp = expandedCol === col.name;
+                const isExp = expandedCols.has(col.name);
                 return (
                   <Card key={col.name}>
-                    <button onClick={() => setExpandedCol(isExp ? null : col.name)}
+                    <button onClick={() => setExpandedCols(prev => {
+                        const next = new Set(prev);
+                        isExp ? next.delete(col.name) : next.add(col.name);
+                        return next;
+                      })}
                       style={{ width: '100%', background: 'none', border: 'none', cursor: 'pointer',
                         display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: 0 }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
@@ -635,6 +726,51 @@ export default function AnalyticsPage() {
                             </ResponsiveContainer>
                           </>
                         ) : (
+                          col.uniqueCount > 20 ? (
+                            // High cardinality — show full data table
+                            <div>
+                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
+                                <p style={{ margin: 0, fontSize: '0.75rem', color: 'rgba(255,255,255,0.4)' }}>
+                                  All values ({col.uniqueCount} unique)
+                                </p>
+                                <span style={{ fontSize: '0.72rem', padding: '2px 8px', background: 'rgba(245,158,11,0.12)',
+                                  border: '1px solid rgba(245,158,11,0.25)', borderRadius: '6px', color: '#f59e0b' }}>
+                                  High cardinality — showing top 50
+                                </span>
+                              </div>
+                              <div style={{ maxHeight: '320px', overflowY: 'auto', borderRadius: '8px',
+                                border: '1px solid rgba(255,255,255,0.07)' }}>
+                                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.82rem' }}>
+                                  <thead style={{ position: 'sticky', top: 0, background: '#111113', zIndex: 1 }}>
+                                    <tr>
+                                      <th style={{ padding: '8px 12px', textAlign: 'left', color: 'rgba(255,255,255,0.35)',
+                                        fontSize: '0.7rem', textTransform: 'uppercase', borderBottom: '1px solid rgba(255,255,255,0.07)' }}>Value</th>
+                                      <th style={{ padding: '8px 12px', textAlign: 'right', color: 'rgba(255,255,255,0.35)',
+                                        fontSize: '0.7rem', textTransform: 'uppercase', borderBottom: '1px solid rgba(255,255,255,0.07)' }}>Count</th>
+                                      <th style={{ padding: '8px 12px', textAlign: 'right', color: 'rgba(255,255,255,0.35)',
+                                        fontSize: '0.7rem', textTransform: 'uppercase', borderBottom: '1px solid rgba(255,255,255,0.07)' }}>%</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody>
+                                    {col.topValues?.slice(0, 50).map((item: any, i: number) => (
+                                      <tr key={i} style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
+                                        <td style={{ padding: '7px 12px', color: 'rgba(255,255,255,0.85)', maxWidth: '300px',
+                                          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                          {item.name}
+                                        </td>
+                                        <td style={{ padding: '7px 12px', textAlign: 'right', color: COLORS[i % COLORS.length], fontWeight: 600 }}>
+                                          {item.value}
+                                        </td>
+                                        <td style={{ padding: '7px 12px', textAlign: 'right', color: 'rgba(255,255,255,0.4)', fontSize: '0.78rem' }}>
+                                          {col.count > 0 ? ((item.value / col.count) * 100).toFixed(1) + '%' : '—'}
+                                        </td>
+                                      </tr>
+                                    ))}
+                                  </tbody>
+                                </table>
+                              </div>
+                            </div>
+                          ) : (
                           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
                             <div>
                               <p style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.4)', marginBottom: '0.5rem' }}>Top Values</p>
@@ -662,6 +798,7 @@ export default function AnalyticsPage() {
                               </ResponsiveContainer>
                             </div>
                           </div>
+                          )
                         )}
                       </div>
                     )}
@@ -764,26 +901,45 @@ export default function AnalyticsPage() {
           {/* AI for dataset */}
           {subTab === 'ai' && (
             <Card>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1rem' }}>
-                <h3 style={{ color: '#a5b4fc', display: 'flex', alignItems: 'center', gap: '8px', margin: 0 }}>
-                  <BrainCircuit size={16} /> AI Dataset Analysis
+              <div style={{ marginBottom: '1.25rem' }}>
+                <h3 style={{ color: '#a5b4fc', display: 'flex', alignItems: 'center', gap: '8px', margin: '0 0 1rem' }}>
+                  <BrainCircuit size={16} /> AI Dataset Insights — Ask Anything
                 </h3>
-                <button onClick={generateAI} disabled={aiLoading}
-                  style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 18px',
-                    background: 'rgba(16,185,129,0.15)', border: '1px solid #10b981',
-                    borderRadius: '8px', color: '#10b981', cursor: 'pointer', fontSize: '0.85rem', fontWeight: 600 }}>
-                  {aiLoading ? <Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} /> : <Sparkles size={14} />}
-                  {aiText ? 'Regenerate' : 'Generate'}
-                </button>
+                <div style={{ display: 'flex', gap: '10px', alignItems: 'stretch' }}>
+                  <input
+                    type="text"
+                    value={aiQuery}
+                    onChange={e => setAiQuery(e.target.value)}
+                    onKeyDown={e => e.key === 'Enter' && !aiLoading && aiQuery.trim() && generateAI()}
+                    placeholder="e.g. Which column has most missing data? What are the key patterns?"
+                    style={{ flex: 1, padding: '10px 14px', background: 'rgba(0,0,0,0.35)',
+                      border: '1px solid rgba(16,185,129,0.35)', borderRadius: '10px', color: '#fff',
+                      fontSize: '0.875rem', outline: 'none' }}
+                  />
+                  <button onClick={() => generateAI()} disabled={aiLoading || !aiQuery.trim()}
+                    style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 20px',
+                      background: aiQuery.trim() ? 'linear-gradient(135deg,#10b981,#06b6d4)' : 'rgba(16,185,129,0.15)',
+                      border: '1px solid #10b981', borderRadius: '10px', color: aiQuery.trim() ? '#fff' : '#10b981',
+                      cursor: aiLoading || !aiQuery.trim() ? 'not-allowed' : 'pointer',
+                      fontSize: '0.875rem', fontWeight: 600, opacity: aiLoading ? 0.7 : 1, whiteSpace: 'nowrap' }}>
+                    {aiLoading ? <Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} /> : <Sparkles size={14} />}
+                    {aiLoading ? 'Analyzing...' : 'Ask AI'}
+                  </button>
+                </div>
+                <p style={{ margin: '6px 0 0', fontSize: '0.75rem', color: 'rgba(255,255,255,0.3)' }}>
+                  Type your question and press Enter or click Ask AI
+                </p>
               </div>
               {aiText ? (
-                <div style={{ color: 'rgba(255,255,255,0.82)', lineHeight: 1.8, whiteSpace: 'pre-wrap', fontSize: '0.9rem' }}>
+                <div style={{ borderTop: '1px solid rgba(255,255,255,0.07)', paddingTop: '1.25rem',
+                  color: 'rgba(255,255,255,0.82)', lineHeight: 1.8, whiteSpace: 'pre-wrap', fontSize: '0.9rem' }}>
                   {aiText}
                 </div>
-              ) : (
-                <p style={{ color: 'rgba(255,255,255,0.35)', fontSize: '0.9rem', textAlign: 'center', padding: '2rem' }}>
-                  Click "Generate" to get Claude AI insights on this dataset.
-                </p>
+              ) : !aiLoading && (
+                <div style={{ textAlign: 'center', padding: '2rem', color: 'rgba(255,255,255,0.25)', fontSize: '0.9rem' }}>
+                  <BrainCircuit size={32} style={{ marginBottom: '0.75rem', opacity: 0.3 }} />
+                  <p style={{ margin: 0 }}>Type a question above to get AI insights on this dataset</p>
+                </div>
               )}
             </Card>
           )}
@@ -904,11 +1060,29 @@ export default function AnalyticsPage() {
 
   return (
     <div style={{ padding: '1.5rem', maxWidth: '1200px', margin: '0 auto', width: '100%', boxSizing: 'border-box' }}>
-      <div style={{ marginBottom: '1.5rem' }}>
-        <h1 style={{ fontSize: '1.6rem', fontWeight: 700, color: '#fff', margin: 0 }}>Analytics</h1>
-        <p style={{ color: 'rgba(255,255,255,0.45)', margin: '4px 0 0', fontSize: '0.875rem' }}>
-          Trend analysis, segmentation, correlation & AI insights
-        </p>
+      <div style={{ marginBottom: '1.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '1rem' }}>
+        <div>
+          <h1 style={{ fontSize: '1.6rem', fontWeight: 700, color: '#fff', margin: 0 }}>Analytics</h1>
+          <p style={{ color: 'rgba(255,255,255,0.45)', margin: '4px 0 0', fontSize: '0.875rem' }}>
+            Trend analysis, segmentation, correlation & AI insights
+          </p>
+        </div>
+        {(formData || datasetData || overview) && (
+          <div style={{ display: 'flex', gap: '8px' }}>
+            <button onClick={downloadCSV}
+              style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '9px 18px',
+                background: 'rgba(16,185,129,0.15)', border: '1px solid rgba(16,185,129,0.4)',
+                borderRadius: '10px', color: '#10b981', cursor: 'pointer', fontWeight: 600, fontSize: '0.82rem' }}>
+              <FileDown size={15} /> CSV
+            </button>
+            <button onClick={downloadPDF}
+              style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '9px 18px',
+                background: 'linear-gradient(135deg,#6366f1,#8b5cf6)', border: 'none',
+                borderRadius: '10px', color: '#fff', cursor: 'pointer', fontWeight: 600, fontSize: '0.82rem' }}>
+              <Download size={15} /> PDF
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Main Tabs */}
@@ -930,9 +1104,11 @@ export default function AnalyticsPage() {
         ))}
       </div>
 
-      {tab === 'forms'    && renderForms()}
-      {tab === 'datasets' && renderDatasets()}
-      {tab === 'overview' && renderOverview()}
+      <div ref={analyticsRef}>
+        {tab === 'forms'    && renderForms()}
+        {tab === 'datasets' && renderDatasets()}
+        {tab === 'overview' && renderOverview()}
+      </div>
 
       <style>{`@keyframes spin { from{transform:rotate(0deg)} to{transform:rotate(360deg)} }`}</style>
     </div>
