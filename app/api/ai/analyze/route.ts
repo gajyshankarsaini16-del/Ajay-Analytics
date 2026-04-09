@@ -1,149 +1,173 @@
 export const dynamic = 'force-dynamic';
 import { NextResponse } from 'next/server';
 
+async function callGemini(prompt: string) {
+  const { GoogleGenAI } = await import('@google/genai');
+  const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || '' });
+  const r = await ai.models.generateContent({ model: 'gemini-2.5-flash', contents: prompt });
+  return r.text;
+}
+
+async function callClaude(system: string, user: string) {
+  const r = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-api-key': process.env.ANTHROPIC_API_KEY || '',
+      'anthropic-version': '2023-06-01',
+    },
+    body: JSON.stringify({
+      model: 'claude-opus-4-5',
+      max_tokens: 800,
+      system,
+      messages: [{ role: 'user', content: user }],
+    }),
+  });
+  if (!r.ok) throw new Error('Claude API failed');
+  const d = await r.json();
+  return d.content?.[0]?.text || '';
+}
+
 export async function POST(request: Request) {
   try {
-    const { context, type, query } = await request.json();
+    const { context, type } = await request.json();
+    const useAnthropic = !!process.env.ANTHROPIC_API_KEY;
 
-    let systemPrompt = '';
-    let userPrompt = '';
+    let analysis = '';
 
-    // If a custom query is provided, use it directly with the data context
-    if (query && query.trim()) {
-      systemPrompt = `You are a senior data analyst. Answer the user's specific question about their data clearly and concisely. Use actual numbers from the context. Format with markdown where helpful.`;
-      userPrompt = `User question: "${query}"\n\nData context:\n${JSON.stringify(context, null, 2)}\n\nAnswer the question specifically using the data above.`;
+    /* ── Question-level insight ── */
+    if (type === 'question_insight') {
+      const prompt = `You are a form analytics expert. In 2-3 sentences, give a clear, specific insight about this form question's responses. Be direct and actionable. Mention the most interesting pattern.
 
-    } else if (type === 'dataset') {
-      systemPrompt = `You are a senior data scientist providing professional dataset analysis reports. 
-Be specific, use actual numbers from the data, and provide actionable insights. 
-Format with clear sections using markdown. Keep it concise but impactful.`;
+Question: "${context.label}" (type: ${context.type})
+Total answers: ${context.totalAnswers}
+Top answers: ${JSON.stringify(context.chartData?.slice(0,5))}
 
-      userPrompt = `Analyze this dataset and provide a professional report with:
+Write in simple English. Start with the key finding directly.`;
 
-## 1. Dataset Overview
-What kind of data this is, its scale and structure.
+      analysis = useAnthropic
+        ? await callClaude('You are a concise data analyst. Give specific, actionable insights in 2-3 sentences.', prompt)
+        : await callGemini(prompt);
+    }
 
-## 2. Key Statistical Findings
-Most important patterns, distributions, and outliers. Reference actual numbers.
+    /* ── Column-level insight ── */
+    else if (type === 'column_insight') {
+      const prompt = `You are a data scientist. In 2-3 sentences, give a specific insight about this dataset column. Mention anomalies, patterns, or recommendations.
 
-## 3. Column-by-Column Insights
-Notable observations for numeric stats and categorical distributions.
+Column: "${context.name}" (type: ${context.type})
+${context.type === 'numeric'
+  ? `Min: ${context.min}, Max: ${context.max}, Mean: ${context.mean}, Median: ${context.median}, Std: ${context.std}`
+  : `Unique values: ${context.uniqueCount}, Top values: ${JSON.stringify(context.topValues)}, Missing: ${context.missing}`}
 
-## 4. Data Quality Assessment
-Missing values, inconsistencies, or data issues found.
+Be specific. Start directly with the insight.`;
 
-## 5. Strategic Recommendations
-- Top 3-5 specific, actionable next steps based on this data
+      analysis = useAnthropic
+        ? await callClaude('You are a concise data scientist. Give specific column-level insights in 2-3 sentences.', prompt)
+        : await callGemini(prompt);
+    }
 
-Dataset:
-${JSON.stringify(context, null, 2)}`;
+    /* ── Full form report ── */
+    else if (type === 'form_report') {
+      const prompt = `Analyze this form response data and provide a professional report:
 
-    } else if (type === 'form_report') {
-      systemPrompt = `You are a business intelligence analyst specializing in survey and form data analysis.
-Provide clear, specific insights with actual numbers. Format professionally with markdown sections.`;
+## Key Findings
+What are the 3 most important patterns in the responses? Be specific with numbers.
 
-      userPrompt = `Analyze this form response data and provide:
+## Response Quality
+Assess the completion rate and engagement quality.
 
-## 1. Response Overview
-Total participation, completion rate, and response quality assessment.
+## Recommendations
+2-3 specific, actionable next steps based on the data.
 
-## 2. Key Insights
-The 3-5 most significant patterns in the responses, with specific numbers.
+Form Data: ${JSON.stringify(context, null, 2)}`;
 
-## 3. Question-by-Question Analysis
-Notable findings for each question, especially dominant answers and outliers.
+      analysis = useAnthropic
+        ? await callClaude('You are a business intelligence analyst specializing in form data. Be specific, use actual numbers, format with markdown.', prompt)
+        : await callGemini(prompt);
+    }
 
-## 4. Respondent Behavior
-Patterns in how people answered, drop-off points, and engagement signals.
+    /* ── Dataset report ── */
+    else if (type === 'dataset') {
+      const prompt = `Analyze this dataset and provide insights:
 
-## 5. Recommendations
-- Specific actions based on what the data reveals
+## Dataset Overview
+What kind of data is this? What's its scale?
 
-Form Data:
-${JSON.stringify(context, null, 2)}`;
+## Key Statistical Findings
+Most important patterns, outliers, distributions (use actual numbers).
 
-    } else if (type === 'overall_report') {
-      systemPrompt = `You are a C-level business intelligence advisor. Generate executive-grade reports 
-that are clear, data-driven, and focus on business impact. Use markdown formatting.`;
+## Data Quality
+Missing values, inconsistencies, issues.
 
-      userPrompt = `Generate a comprehensive executive intelligence report:
+## Recommendations
+Top 3 actionable next steps based on this data.
+
+Dataset: ${JSON.stringify(context, null, 2)}`;
+
+      analysis = useAnthropic
+        ? await callClaude('You are a senior data scientist. Be specific, use actual numbers, format with markdown.', prompt)
+        : await callGemini(prompt);
+    }
+
+    /* ── Overall platform ── */
+    else if (type === 'overall_report') {
+      const prompt = `Generate an executive platform report:
 
 ## Executive Summary
-2-3 sentence high-level overview for C-level stakeholders.
+2-3 sentence overview for stakeholders.
 
-## Platform Health Score
-Overall assessment of data quality and engagement metrics with specific numbers.
+## Platform Health
+Overall metrics assessment with specific numbers.
 
-## Form Performance Analysis
-Key findings from form submissions — what's working, what needs attention.
+## Top Recommendations
+3 prioritized action items.
 
-## Dataset Intelligence
-Patterns and insights from uploaded data sources.
+Platform Data: ${JSON.stringify(context, null, 2)}`;
 
-## Risk Flags
-Any data quality issues, low engagement areas, or concerning trends.
-
-## Top 5 Strategic Recommendations
-Specific, prioritized action items with expected impact.
-
-Platform Data:
-${JSON.stringify(context, null, 2)}`;
-
-    } else if (type === 'analytics') {
-      systemPrompt = `You are a senior analytics consultant. Provide concise, actionable analysis.`;
-      userPrompt = `Analyze these platform metrics and provide insights with bullet points for key takeaways:
-${JSON.stringify(context, null, 2)}`;
-
-    } else {
-      systemPrompt = `You are a data analysis expert. Be specific and actionable.`;
-      userPrompt = `Analyze this data and provide professional insights: ${JSON.stringify(context)}`;
+      analysis = useAnthropic
+        ? await callClaude('You are a C-level business intelligence advisor. Be concise and data-driven.', prompt)
+        : await callGemini(prompt);
     }
 
-    // Call Claude API via Anthropic
-    const response = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': process.env.ANTHROPIC_API_KEY || '',
-        'anthropic-version': '2023-06-01',
-      },
-      body: JSON.stringify({
-        model: 'claude-opus-4-5',
-        max_tokens: 1500,
-        system: systemPrompt,
-        messages: [{ role: 'user', content: userPrompt }],
-      }),
-    });
-
-    if (!response.ok) {
-      // Fallback to Gemini if Claude key not set
-      if (!process.env.ANTHROPIC_API_KEY && process.env.GEMINI_API_KEY) {
-        return fallbackToGemini(userPrompt, process.env.GEMINI_API_KEY);
-      }
-      const err = await response.json();
-      throw new Error(err.error?.message || 'Claude API failed');
+    /* ── Analytics summary ── */
+    else if (type === 'analytics') {
+      const prompt = `Analyze these platform metrics and give bullet-point insights:\n${JSON.stringify(context, null, 2)}`;
+      analysis = useAnthropic
+        ? await callClaude('You are an analytics consultant. Be concise and actionable.', prompt)
+        : await callGemini(prompt);
     }
 
-    const data = await response.json();
-    const analysis = data.content?.[0]?.text || 'No analysis generated.';
+    /* ── Report ── */
+    else if (type === 'report') {
+      const prompt = `Review this report data and provide a 2-3 paragraph professional summary with key takeaways as bullet points:\n${JSON.stringify(context, null, 2)}`;
+      analysis = useAnthropic
+        ? await callClaude('You are a business intelligence AI. Format professionally with markdown.', prompt)
+        : await callGemini(prompt);
+    }
+
+    else {
+      const prompt = `Analyze this data and provide professional insights: ${JSON.stringify(context)}`;
+      analysis = useAnthropic
+        ? await callClaude('You are a data expert.', prompt)
+        : await callGemini(prompt);
+    }
 
     return NextResponse.json({ analysis });
   } catch (error: any) {
     console.error('[AI Analyze Error]', error);
+    // Fallback to Gemini if Claude fails
+    try {
+      if (process.env.GEMINI_API_KEY) {
+        const { context, type } = await request.clone().json();
+        const { GoogleGenAI } = await import('@google/genai');
+        const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+        const r = await ai.models.generateContent({
+          model: 'gemini-2.5-flash',
+          contents: `Analyze this ${type} data and give insights: ${JSON.stringify(context)}`
+        });
+        return NextResponse.json({ analysis: r.text });
+      }
+    } catch {}
     return NextResponse.json({ error: error.message || 'AI analysis failed' }, { status: 500 });
-  }
-}
-
-async function fallbackToGemini(prompt: string, apiKey: string) {
-  try {
-    const { GoogleGenAI } = await import('@google/genai');
-    const ai = new GoogleGenAI({ apiKey });
-    const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash',
-      contents: prompt,
-    });
-    return NextResponse.json({ analysis: response.text });
-  } catch (e: any) {
-    return NextResponse.json({ error: e.message }, { status: 500 });
   }
 }
