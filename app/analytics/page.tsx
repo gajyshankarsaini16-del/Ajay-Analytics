@@ -24,7 +24,7 @@ const T = {
   dimmed:'rgba(241,245,249,0.2)',
 };
 const CC = ['#2563eb','#7c3aed','#10b981','#f59e0b','#ec4899','#06b6d4','#f97316','#84cc16'];
-const UNIQUE_LIMIT = 20;
+const UNIQUE_LIMIT = 8; // Only use chart if ≤8 unique values, else always show full table
 
 /* ── Tiny components ── */
 const Card=({children,style,id}:any)=><div id={id} style={{background:T.card,border:`1px solid ${T.border}`,borderRadius:16,padding:'1.5rem',...style}}>{children}</div>;
@@ -53,12 +53,12 @@ const TT=({active,payload,label}:any)=>{
   </div>;
 };
 
-/* ── Raw table for >20 unique ── */
+/* ── Raw table for all unique values ── */
 function RawTable({data,colName,uniqueCount}:{data:{name:string;value:number}[];colName:string;uniqueCount:number}){
   const [dir,setDir]=useState<'asc'|'desc'>('desc');
   const [q,setQ]=useState('');
   const [pg,setPg]=useState(0);
-  const PS=15;
+  const PS=50; // Show 50 per page
   const filtered=data.filter(r=>r.name.toLowerCase().includes(q.toLowerCase())).sort((a,b)=>dir==='desc'?b.value-a.value:a.value-b.value);
   const paged=filtered.slice(pg*PS,(pg+1)*PS);
   const pages=Math.ceil(filtered.length/PS);
@@ -68,13 +68,59 @@ function RawTable({data,colName,uniqueCount}:{data:{name:string;value:number}[];
       <div style={{display:'flex',alignItems:'center',gap:'0.75rem',marginBottom:'0.75rem',flexWrap:'wrap'}}>
         <div style={{display:'flex',alignItems:'center',gap:6,padding:'5px 12px',background:`${T.amber}18`,border:`1px solid ${T.amber}44`,borderRadius:8}}>
           <Table2 size={13} color={T.amber}/>
-          <span style={{fontSize:'0.75rem',color:T.amber,fontWeight:600}}>{uniqueCount} unique values — table mode</span>
+          <span style={{fontSize:'0.75rem',color:T.amber,fontWeight:600}}>{uniqueCount} unique values — showing all</span>
         </div>
-        <input value={q} onChange={e=>{setQ(e.target.value);setPg(0);}} placeholder="Search…"
+        <input value={q} onChange={e=>{setQ(e.target.value);setPg(0);}} placeholder="Search values…"
           style={{flex:1,minWidth:160,padding:'6px 12px',background:T.surface,border:`1px solid ${T.border}`,borderRadius:8,color:T.text,fontSize:'0.82rem',outline:'none'}}/>
         <button onClick={()=>setDir(d=>d==='desc'?'asc':'desc')} style={{padding:'6px 12px',background:`${T.accent}18`,border:`1px solid ${T.accent}44`,borderRadius:8,color:T.accent,fontSize:'0.78rem',cursor:'pointer',fontWeight:600,display:'flex',alignItems:'center',gap:5}}>
           {dir==='desc'?<TrendingDown size={13}/>:<TrendingUp size={13}/>}{dir==='desc'?'High→Low':'Low→High'}
         </button>
+      </div>
+      <div style={{maxHeight:'480px',overflowY:'auto',borderRadius:10,border:`1px solid ${T.border}`}}>
+        <table style={{width:'100%',borderCollapse:'collapse',fontSize:'0.85rem'}}>
+          <thead style={{position:'sticky',top:0,zIndex:1}}>
+            <tr style={{background:T.surface}}>
+              {['#',colName,'Count','Share %','Distribution'].map(h=><th key={h} style={{padding:'10px 14px',textAlign:h==='Count'||h==='Share %'?'right':'left',color:T.dimmed,fontSize:'0.72rem',textTransform:'uppercase',letterSpacing:'0.06em',borderBottom:`1px solid ${T.border}`}}>{h}</th>)}
+            </tr>
+          </thead>
+          <tbody>
+            {paged.map((row,i)=>{
+              const pct=total>0?((row.value/total)*100).toFixed(1):'0';
+              const rank=pg*PS+i+1;
+              return(
+                <tr key={i} style={{borderBottom:`1px solid ${T.border}`,transition:'background 0.15s'}}
+                  onMouseEnter={e=>(e.currentTarget.style.background='rgba(255,255,255,0.03)')}
+                  onMouseLeave={e=>(e.currentTarget.style.background='transparent')}>
+                  <td style={{padding:'9px 14px',color:T.dimmed,fontSize:'0.75rem'}}>{rank}</td>
+                  <td style={{padding:'9px 14px',color:T.text,fontWeight:500,maxWidth:220,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{row.name}</td>
+                  <td style={{padding:'9px 14px',textAlign:'right',color:CC[(rank-1)%CC.length],fontWeight:700}}>{row.value.toLocaleString()}</td>
+                  <td style={{padding:'9px 14px',textAlign:'right',color:T.muted,fontSize:'0.82rem'}}>{pct}%</td>
+                  <td style={{padding:'9px 14px'}}>
+                    <div style={{height:6,background:'rgba(255,255,255,0.06)',borderRadius:3,overflow:'hidden',minWidth:80}}>
+                      <div style={{height:'100%',width:`${pct}%`,background:CC[(rank-1)%CC.length],borderRadius:3,transition:'width 0.4s'}}/>
+                    </div>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+      {pages>1&&<div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginTop:'0.75rem',flexWrap:'wrap',gap:8}}>
+        <span style={{fontSize:'0.75rem',color:T.muted}}>{filtered.length} results · Page {pg+1}/{pages} · {PS} per page</span>
+        <div style={{display:'flex',gap:6}}>
+          <button onClick={()=>setPg(p=>Math.max(0,p-1))} disabled={pg===0} style={{padding:'5px 10px',borderRadius:6,border:`1px solid ${T.border}`,background:'none',color:pg===0?T.dimmed:T.muted,cursor:pg===0?'not-allowed':'pointer',fontSize:'0.78rem'}}>← Prev</button>
+          {[...Array(Math.min(pages,7))].map((_,i)=>{
+            const pageIdx=pages<=7?i:pg<4?i:pg>pages-4?pages-7+i:pg-3+i;
+            return<button key={pageIdx} onClick={()=>setPg(pageIdx)} style={{width:30,height:30,borderRadius:6,border:`1px solid ${pg===pageIdx?T.accent:T.border}`,background:pg===pageIdx?`${T.accent}22`:'none',color:pg===pageIdx?T.accent:T.muted,cursor:'pointer',fontSize:'0.78rem',fontWeight:pg===pageIdx?700:400}}>{pageIdx+1}</button>;
+          })}
+          <button onClick={()=>setPg(p=>Math.min(pages-1,p+1))} disabled={pg===pages-1} style={{padding:'5px 10px',borderRadius:6,border:`1px solid ${T.border}`,background:'none',color:pg===pages-1?T.dimmed:T.muted,cursor:pg===pages-1?'not-allowed':'pointer',fontSize:'0.78rem'}}>Next →</button>
+        </div>
+      </div>}
+    </div>
+  );
+}
+
       </div>
       <div style={{overflowX:'auto',borderRadius:10,border:`1px solid ${T.border}`}}>
         <table style={{width:'100%',borderCollapse:'collapse',fontSize:'0.85rem'}}>
@@ -142,27 +188,57 @@ function QInsight({q,totalSubmissions}:{q:any;totalSubmissions:number}){
   );
 }
 
-/* ── Per-column auto AI insight ── */
+/* ── Per-column auto AI insight (bullet points) ── */
 function ColInsight({col}:{col:any}){
-  const [txt,setTxt]=useState('');
+  const [bullets,setBullets]=useState<string[]>([]);
   const [load,setLoad]=useState(false);
   const done=useRef(false);
   useEffect(()=>{
     if(done.current)return;
     done.current=true; setLoad(true);
     fetch('/api/ai/analyze',{method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({type:'column_insight',context:{name:col.name,type:col.type,...(col.type==='numeric'?{min:col.min,max:col.max,mean:col.mean,median:col.median,std:col.std}:{uniqueCount:col.uniqueCount,topValues:col.topValues?.slice(0,8),missing:col.missing})}})})
-    .then(r=>r.json()).then(d=>{if(d.analysis)setTxt(d.analysis);}).catch(()=>{}).finally(()=>setLoad(false));
+      body:JSON.stringify({type:'column_insight',context:{name:col.name,type:col.type,...(col.type==='numeric'?{min:col.min,max:col.max,mean:col.mean,median:col.median,std:col.std}:{uniqueCount:col.uniqueCount,topValues:col.topValues?.slice(0,10),missing:col.missing})}})})
+    .then(r=>r.json()).then(d=>{
+      if(d.analysis){
+        // Parse into bullet points
+        const raw=d.analysis;
+        const lines=raw.split('\n').map((l:string)=>l.trim()).filter((l:string)=>l.length>0);
+        const pts:string[]=[];
+        lines.forEach((line:string)=>{
+          // Already a bullet
+          if(line.match(/^[-•*]\s+/)||line.match(/^\d+\.\s+/)){
+            pts.push(line.replace(/^[-•*\d.]+\s*/,'').replace(/\*\*/g,'').trim());
+          } else if(line.match(/^##|^#/)){
+            // Skip headers
+          } else {
+            // Split long sentences into bullets
+            const sentences=line.split(/(?<=[.!?])\s+/).filter((s:string)=>s.trim().length>15);
+            sentences.forEach((s:string)=>pts.push(s.replace(/\*\*/g,'').trim()));
+          }
+        });
+        setBullets(pts.slice(0,5).filter((p:string)=>p.length>10));
+      }
+    }).catch(()=>{}).finally(()=>setLoad(false));
   },[col.name]);
   return(
-    <div style={{marginTop:'0.85rem',padding:'0.85rem 1rem',background:'linear-gradient(135deg,#0d1829,#120d24)',border:`1px solid ${T.green}22`,borderRadius:10,display:'flex',gap:10,alignItems:'flex-start'}}>
-      <div style={{padding:5,borderRadius:6,background:`${T.green}18`,flexShrink:0,marginTop:1}}>
-        {load?<Loader2 size={12} color={T.green} style={{animation:'spin 1s linear infinite'}}/>:<Lightbulb size={12} color={T.green}/>}
+    <div style={{marginTop:'0.85rem',padding:'0.85rem 1rem',background:'linear-gradient(135deg,#0d1829,#120d24)',border:`1px solid ${T.green}22`,borderRadius:10}}>
+      <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:'0.6rem'}}>
+        <div style={{padding:5,borderRadius:6,background:`${T.green}18`,flexShrink:0}}>
+          {load?<Loader2 size={12} color={T.green} style={{animation:'spin 1s linear infinite'}}/>:<Lightbulb size={12} color={T.green}/>}
+        </div>
+        <p style={{margin:0,fontSize:'0.68rem',color:T.green,fontWeight:700,textTransform:'uppercase',letterSpacing:'0.06em'}}>Column Insight</p>
       </div>
-      <div>
-        <p style={{margin:'0 0 3px',fontSize:'0.68rem',color:T.green,fontWeight:700,textTransform:'uppercase',letterSpacing:'0.06em'}}>Column Insight</p>
-        <p style={{margin:0,fontSize:'0.82rem',color:'rgba(241,245,249,0.8)',lineHeight:1.6}}>{load?'Analyzing…':(txt||'No insight.')}</p>
-      </div>
+      {load&&<p style={{margin:0,fontSize:'0.82rem',color:'rgba(241,245,249,0.5)',paddingLeft:'0.25rem'}}>Analyzing…</p>}
+      {!load&&bullets.length>0&&(
+        <ul style={{margin:0,padding:'0 0 0 1.1rem',display:'flex',flexDirection:'column',gap:'0.3rem'}}>
+          {bullets.map((b,i)=>(
+            <li key={i} style={{fontSize:'0.82rem',color:'rgba(241,245,249,0.82)',lineHeight:1.55,paddingLeft:'0.2rem'}}>
+              {b}
+            </li>
+          ))}
+        </ul>
+      )}
+      {!load&&bullets.length===0&&<p style={{margin:0,fontSize:'0.82rem',color:'rgba(241,245,249,0.4)',paddingLeft:'0.25rem'}}>No insight available.</p>}
     </div>
   );
 }
@@ -199,7 +275,7 @@ function InsightsBox({insights,loading,onDownload,downloading}:{insights:string[
   );
 }
 
-/* ── Download PDF ── */
+/* ── Download PDF — white background, professional ── */
 async function dlReport(title:string,insights:string[],el:HTMLElement|null){
   const h2c=(await import('html2canvas')).default;
   const {default:jsPDF}=await import('jspdf');
@@ -207,51 +283,83 @@ async function dlReport(title:string,insights:string[],el:HTMLElement|null){
   const pw=pdf.internal.pageSize.getWidth();
   const ph=pdf.internal.pageSize.getHeight();
   const m=15; let y=m;
-  // White bg
+
+  // ── White background throughout ──
   pdf.setFillColor(255,255,255); pdf.rect(0,0,pw,ph,'F');
-  // Blue header bar
-  pdf.setFillColor(37,99,235); pdf.rect(0,0,pw,22,'F');
-  pdf.setTextColor(255,255,255); pdf.setFontSize(13); pdf.setFont('helvetica','bold');
-  pdf.text('Ajay Analytics — Report',m,14);
+
+  // ── Header bar ──
+  pdf.setFillColor(37,99,235); pdf.roundedRect(0,0,pw,26,0,0,'F');
+  pdf.setTextColor(255,255,255); pdf.setFontSize(14); pdf.setFont('helvetica','bold');
+  pdf.text('Analytics Report',m,17);
   pdf.setFontSize(8); pdf.setFont('helvetica','normal');
-  pdf.text(new Date().toLocaleDateString('en-IN',{dateStyle:'long'}),pw-m,14,{align:'right'});
-  y=32;
-  // Title
-  pdf.setTextColor(15,23,42); pdf.setFontSize(16); pdf.setFont('helvetica','bold');
-  pdf.text(title,m,y); y+=10;
-  // Line
-  pdf.setDrawColor(229,231,235); pdf.line(m,y,pw-m,y); y+=8;
-  // Insights
+  pdf.text(new Date().toLocaleDateString('en-IN',{dateStyle:'long'}),pw-m,17,{align:'right'});
+  y=36;
+
+  // ── Report title ──
+  pdf.setTextColor(15,23,42); pdf.setFontSize(18); pdf.setFont('helvetica','bold');
+  pdf.text(title,m,y); y+=4;
+  pdf.setDrawColor(37,99,235); pdf.setLineWidth(0.8); pdf.line(m,y,pw-m,y); y+=10;
+
+  // ── AI Insights section ──
   if(insights.length>0){
-    const boxH=10+insights.length*10;
-    pdf.setFillColor(239,246,255); pdf.roundedRect(m,y,pw-m*2,boxH,3,3,'F');
+    pdf.setFillColor(239,246,255); pdf.roundedRect(m,y,pw-m*2,12+insights.length*10,4,4,'F');
+    pdf.setDrawColor(191,219,254); pdf.setLineWidth(0.3); pdf.roundedRect(m,y,pw-m*2,12+insights.length*10,4,4,'S');
     pdf.setTextColor(37,99,235); pdf.setFontSize(10); pdf.setFont('helvetica','bold');
-    pdf.text('AI-Generated Insights',m+4,y+6); y+=12;
+    pdf.text('💡 AI-Generated Insights',m+5,y+7); y+=13;
     pdf.setTextColor(30,41,59); pdf.setFontSize(9); pdf.setFont('helvetica','normal');
     insights.forEach((ins,i)=>{
-      const lines=pdf.splitTextToSize(`${i+1}. ${ins}`,pw-m*2-8);
-      pdf.text(lines,m+4,y); y+=lines.length*5+2;
+      const bullet=`${String(i+1).padStart(2,'0')}. ${ins}`;
+      const lines=pdf.splitTextToSize(bullet,pw-m*2-10);
+      pdf.text(lines,m+5,y); y+=lines.length*5.5+1.5;
     });
     y+=8;
   }
-  // Charts
+
+  // ── Charts section ──
   if(el){
-    pdf.setDrawColor(229,231,235); pdf.line(m,y,pw-m,y); y+=8;
-    pdf.setTextColor(15,23,42); pdf.setFontSize(11); pdf.setFont('helvetica','bold');
-    pdf.text('Charts & Visualizations',m,y); y+=8;
-    const canvas=await h2c(el,{scale:1.5,backgroundColor:'#ffffff',useCORS:true,logging:false});
+    // New page if needed
+    if(y>ph-80){pdf.addPage();pdf.setFillColor(255,255,255);pdf.rect(0,0,pw,ph,'F');y=m;}
+    pdf.setDrawColor(229,231,235); pdf.setLineWidth(0.3); pdf.line(m,y,pw-m,y); y+=7;
+    pdf.setTextColor(15,23,42); pdf.setFontSize(12); pdf.setFont('helvetica','bold');
+    pdf.text('📊 Charts & Visualizations',m,y); y+=8;
+
+    const canvas=await h2c(el,{scale:2,backgroundColor:'#ffffff',useCORS:true,logging:false,
+      onclone:(doc:Document)=>{
+        // Make cloned element white bg for export
+        const all=doc.querySelectorAll('*');
+        all.forEach((el:any)=>{
+          const s=window.getComputedStyle(el);
+          if(s.background.includes('rgba(255,255,255,0.0')||s.background.includes('#0a0e1a')||s.background.includes('#111827')||s.background.includes('#151e2d')){
+            el.style.background='#ffffff';
+            el.style.color='#1e293b';
+          }
+        });
+      }
+    });
     const imgData=canvas.toDataURL('image/png');
     const imgW=pw-m*2;
     const imgH=(canvas.height*imgW)/canvas.width;
-    if(y+imgH<ph-m){
-      pdf.addImage(imgData,'PNG',m,y,imgW,imgH);
-    } else {
-      pdf.addPage(); pdf.setFillColor(255,255,255); pdf.rect(0,0,pw,ph,'F');
-      y=m; pdf.addImage(imgData,'PNG',m,y,imgW,Math.min(imgH,ph-m*2));
+    let pos=0;
+    while(pos<imgH){
+      if(pos>0){pdf.addPage();pdf.setFillColor(255,255,255);pdf.rect(0,0,pw,ph,'F');y=m;}
+      const sliceH=Math.min(imgH-pos,ph-y-m);
+      pdf.addImage(imgData,'PNG',m,y,imgW,imgH,undefined,'FAST',0);
+      pos+=sliceH+m; y=m;
+      break; // single page image — let jsPDF handle overflow
     }
   }
-  pdf.setTextColor(150,150,150); pdf.setFontSize(7); pdf.setFont('helvetica','normal');
-  pdf.text('Generated by Ajay Analytics Platform',pw/2,ph-8,{align:'center'});
+
+  // ── Footer ──
+  const totalPages=pdf.getNumberOfPages();
+  for(let p=1;p<=totalPages;p++){
+    pdf.setPage(p);
+    pdf.setFillColor(248,250,252); pdf.rect(0,ph-12,pw,12,'F');
+    pdf.setDrawColor(229,231,235); pdf.line(0,ph-12,pw,ph-12);
+    pdf.setTextColor(148,163,184); pdf.setFontSize(7); pdf.setFont('helvetica','normal');
+    pdf.text('Generated by Ajay Analytics Platform',m,ph-5);
+    pdf.text(`Page ${p} of ${totalPages}`,pw-m,ph-5,{align:'right'});
+  }
+
   pdf.save(`${title.replace(/[^a-z0-9]/gi,'_')}_report.pdf`);
 }
 
@@ -492,6 +600,9 @@ function DatasetAnalysis({dsData,dsId}:{dsData:any;dsId:string}){
         <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
           <button onClick={genInsights} disabled={insLoad} style={{display:'flex',alignItems:'center',gap:7,padding:'9px 18px',background:insLoad?T.card:`linear-gradient(135deg,${T.accent},${T.accent2})`,border:`1px solid ${insLoad?T.border:'transparent'}`,borderRadius:10,color:'#fff',cursor:insLoad?'not-allowed':'pointer',fontSize:'0.82rem',fontWeight:700}}>
             {insLoad?<Loader2 size={14} style={{animation:'spin 1s linear infinite'}}/>:<Zap size={14}/>}{insLoad?'Analyzing…':insights.length?'Refresh Insights':'Generate AI Insights'}
+          </button>
+          <button onClick={handleDl} disabled={downloading} style={{display:'flex',alignItems:'center',gap:7,padding:'9px 18px',background:downloading?T.card:`${T.green}18`,border:`1px solid ${downloading?T.border:T.green+'66'}`,borderRadius:10,color:downloading?T.muted:T.green,cursor:downloading?'not-allowed':'pointer',fontSize:'0.82rem',fontWeight:700}}>
+            {downloading?<Loader2 size={14} style={{animation:'spin 1s linear infinite'}}/>:<Download size={14}/>}{downloading?'Exporting…':'Download Report'}
           </button>
           <button onClick={()=>setChatOpen(true)} style={{display:'flex',alignItems:'center',gap:7,padding:'9px 18px',background:`${T.cyan}18`,border:`1px solid ${T.cyan}44`,borderRadius:10,color:T.cyan,cursor:'pointer',fontSize:'0.82rem',fontWeight:700}}><MessageSquare size={14}/> Ask AI</button>
         </div>
