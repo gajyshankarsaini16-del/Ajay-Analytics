@@ -1,874 +1,1261 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import {
-  BarChart, Bar, PieChart, Pie, Cell, LineChart, Line, ScatterChart, Scatter,
-  XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend
+  BarChart, Bar, PieChart, Pie, Cell, LineChart, Line,
+  XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
+  Legend, AreaChart, Area, RadarChart, Radar, PolarGrid,
+  PolarAngleAxis, ScatterChart, Scatter
 } from 'recharts';
 import {
-  ClipboardList, Database, Globe, Loader2, BrainCircuit,
-  Sparkles, RefreshCw, TrendingUp, TrendingDown, AlertCircle,
-  CheckCircle, ChevronDown, ChevronUp, GitBranch, Info, Zap
+  ClipboardList, Upload, ChevronRight, BarChart2, FileText,
+  Loader2, Sparkles, RefreshCw, TrendingUp, TrendingDown,
+  AlertCircle, CheckCircle, ChevronDown, ChevronUp, Send,
+  Bot, User, X, MessageSquare, Lightbulb, Target, Database,
+  Activity, Zap, ArrowUpRight, ArrowDownRight, Filter
 } from 'lucide-react';
 
-const COLORS = ['#6366f1','#10b981','#f59e0b','#ec4899','#8b5cf6','#06b6d4','#f97316','#84cc16'];
+/* ─── Design Tokens ───────────────────────────────────── */
+const T = {
+  bg:       '#0a0e1a',
+  surface:  '#111827',
+  card:     '#151e2d',
+  border:   'rgba(255,255,255,0.07)',
+  accent:   '#2563eb',
+  accent2:  '#7c3aed',
+  green:    '#10b981',
+  amber:    '#f59e0b',
+  red:      '#ef4444',
+  cyan:     '#06b6d4',
+  pink:     '#ec4899',
+  text:     '#f1f5f9',
+  muted:    'rgba(241,245,249,0.45)',
+  dimmed:   'rgba(241,245,249,0.2)',
+};
 
+const CHART_COLORS = ['#2563eb','#7c3aed','#10b981','#f59e0b','#ec4899','#06b6d4','#f97316','#84cc16'];
+
+/* ─── Mini Components ─────────────────────────────────── */
 const Card = ({ children, style }: any) => (
   <div style={{
-    background: 'rgba(255,255,255,0.03)',
-    border: '1px solid rgba(255,255,255,0.08)',
-    borderRadius: '16px', padding: '1.5rem', ...style
+    background: T.card,
+    border: `1px solid ${T.border}`,
+    borderRadius: 16,
+    padding: '1.5rem',
+    ...style
   }}>{children}</div>
 );
 
-const KPI = ({ label, value, sub, color = '#6366f1', growth }: any) => (
-  <div style={{
-    background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)',
-    borderRadius: '14px', padding: '1.25rem',
-  }}>
-    <p style={{ margin: 0, fontSize: '0.72rem', color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>{label}</p>
-    <p style={{ margin: '6px 0 2px', fontSize: '2rem', fontWeight: 700, color: '#fff', lineHeight: 1 }}>{value ?? '—'}</p>
-    {growth !== undefined && (
-      <p style={{ margin: 0, fontSize: '0.75rem', color: growth > 0 ? '#10b981' : growth < 0 ? '#ef4444' : '#a1a1aa',
-        display: 'flex', alignItems: 'center', gap: '4px' }}>
-        {growth > 0 ? <TrendingUp size={12}/> : growth < 0 ? <TrendingDown size={12}/> : null}
-        {growth > 0 ? '+' : ''}{growth}% MoM
-      </p>
-    )}
-    {sub && growth === undefined && <p style={{ margin: 0, fontSize: '0.75rem', color }}>{sub}</p>}
-  </div>
+const Chip = ({ label, color = T.accent }: any) => (
+  <span style={{
+    display: 'inline-flex', alignItems: 'center', gap: 4,
+    padding: '3px 10px', borderRadius: 20, fontSize: '0.72rem',
+    fontWeight: 600, background: `${color}22`, border: `1px solid ${color}44`,
+    color, letterSpacing: '0.04em'
+  }}>{label}</span>
 );
 
-const AIBox = ({ text, loading }: { text: string|null, loading: boolean }) => {
-  if (!text && !loading) return null;
+const KPICard = ({ label, value, delta, color = T.accent, icon: Icon }: any) => {
+  const pos = delta > 0;
   return (
     <div style={{
-      background: 'rgba(99,102,241,0.06)', border: '1px solid rgba(99,102,241,0.18)',
-      borderRadius: '10px', padding: '0.9rem 1rem', marginTop: '0.75rem',
-      display: 'flex', gap: '8px', alignItems: 'flex-start'
+      background: `linear-gradient(135deg, ${T.card}, ${T.surface})`,
+      border: `1px solid ${T.border}`,
+      borderRadius: 14,
+      padding: '1.25rem 1.5rem',
+      position: 'relative',
+      overflow: 'hidden',
     }}>
-      {loading
-        ? <Loader2 size={14} style={{ animation: 'spin 1s linear infinite', color: '#a5b4fc', flexShrink: 0, marginTop: '2px' }} />
-        : <Sparkles size={14} style={{ color: '#a5b4fc', flexShrink: 0, marginTop: '2px' }} />}
-      <p style={{ margin: 0, fontSize: '0.82rem', color: 'rgba(255,255,255,0.78)', lineHeight: 1.7, whiteSpace: 'pre-wrap' }}>
-        {loading ? 'AI analysis chal rahi hai...' : text}
-      </p>
+      <div style={{
+        position: 'absolute', top: 0, right: 0, width: 80, height: 80,
+        background: `radial-gradient(circle at 80% 20%, ${color}18, transparent 70%)`,
+        pointerEvents: 'none'
+      }} />
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 10 }}>
+        <p style={{ margin: 0, fontSize: '0.72rem', color: T.muted, textTransform: 'uppercase', letterSpacing: '0.08em' }}>{label}</p>
+        {Icon && <div style={{ padding: 6, borderRadius: 8, background: `${color}18` }}><Icon size={14} color={color} /></div>}
+      </div>
+      <p style={{ margin: 0, fontSize: '1.9rem', fontWeight: 800, color: T.text, lineHeight: 1 }}>{value}</p>
+      {delta !== undefined && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 8 }}>
+          {pos ? <ArrowUpRight size={13} color={T.green} /> : <ArrowDownRight size={13} color={T.red} />}
+          <span style={{ fontSize: '0.75rem', color: pos ? T.green : T.red, fontWeight: 600 }}>
+            {pos ? '+' : ''}{delta}% vs last period
+          </span>
+        </div>
+      )}
     </div>
   );
 };
 
-const Desc = ({ text }: { text: string }) => (
-  <p style={{ margin: '6px 0 0', fontSize: '0.78rem', color: 'rgba(255,255,255,0.4)', lineHeight: 1.5 }}>{text}</p>
-);
+/* ─── Custom Tooltip ──────────────────────────────────── */
+const CustomTooltip = ({ active, payload, label }: any) => {
+  if (!active || !payload?.length) return null;
+  return (
+    <div style={{
+      background: '#1e2a3a', border: `1px solid ${T.border}`,
+      borderRadius: 10, padding: '10px 14px', fontSize: '0.82rem',
+      boxShadow: '0 8px 32px rgba(0,0,0,0.4)'
+    }}>
+      <p style={{ margin: '0 0 6px', color: T.muted, fontWeight: 600 }}>{label}</p>
+      {payload.map((p: any, i: number) => (
+        <p key={i} style={{ margin: '2px 0', color: p.color || T.text }}>
+          {p.name}: <strong>{p.value}</strong>
+        </p>
+      ))}
+    </div>
+  );
+};
 
-const SubTabBtn = ({ active, onClick, children }: any) => (
-  <button onClick={onClick} style={{
-    padding: '7px 16px', border: 'none', background: 'none',
-    borderBottom: active ? '2px solid #6366f1' : '2px solid transparent',
-    color: active ? '#a5b4fc' : 'rgba(255,255,255,0.45)',
-    cursor: 'pointer', fontWeight: active ? 600 : 400, fontSize: '0.82rem', marginBottom: '-1px'
-  }}>{children}</button>
-);
-
-function buildTrend(days = 30) {
-  const map: Record<string,number> = {};
-  for (let i = days-1; i >= 0; i--) {
-    const d = new Date(); d.setDate(d.getDate() - i);
-    map[d.toISOString().split('T')[0]] = 0;
-  }
-  return map;
-}
-
-function pearson(rows: any[], a: string, b: string) {
-  const pairs = rows.map((r:any)=>[parseFloat(r[a]),parseFloat(r[b])]).filter(([x,y])=>!isNaN(x)&&!isNaN(y));
-  if (pairs.length < 3) return null;
-  const n = pairs.length;
-  const ma = pairs.reduce((s,[x])=>s+x,0)/n;
-  const mb = pairs.reduce((s,[,y])=>s+y,0)/n;
-  const num = pairs.reduce((s,[x,y])=>s+(x-ma)*(y-mb),0);
-  const da = Math.sqrt(pairs.reduce((s,[x])=>s+(x-ma)**2,0));
-  const db = Math.sqrt(pairs.reduce((s,[,y])=>s+(y-mb)**2,0));
-  if (!da||!db) return null;
-  return Math.round((num/(da*db))*100)/100;
-}
-
-type Tab = 'forms'|'datasets'|'overview';
-
-export default function AnalyticsPage() {
-  const [tab, setTab]           = useState<Tab>('forms');
-  const [subTab, setSubTab]     = useState('summary');
-  const [forms, setForms]       = useState<any[]>([]);
-  const [datasets, setDatasets] = useState<any[]>([]);
-  const [selForm, setSelForm]   = useState('');
-  const [selDs, setSelDs]       = useState('');
-  const [formData, setFormData] = useState<any>(null);
-  const [dsData, setDsData]     = useState<any>(null);
-  const [rawRows, setRawRows]   = useState<any[]>([]);
-  const [overview, setOverview] = useState<any>(null);
-  const [loading, setLoading]   = useState(false);
-  const [mounted, setMounted]   = useState(false);
-  const [trendDays, setTrendDays] = useState(30);
-  const [corrA, setCorrA]       = useState('');
-  const [corrB, setCorrB]       = useState('');
-  const [expandedCol, setExpandedCol] = useState<string|null>(null);
-
-  // AI states
-  const [globalAI, setGlobalAI]           = useState<string|null>(null);
-  const [globalAILoading, setGlobalAILoading] = useState(false);
-  const [colAI, setColAI]                 = useState<Record<string,string>>({});
-  const [colAILoading, setColAILoading]   = useState<Record<string,boolean>>({});
-  const [qAI, setQAI]                     = useState<Record<string,string>>({});
-  const [qAILoading, setQAILoading]       = useState<Record<string,boolean>>({});
+/* ─── AI Chat Panel ───────────────────────────────────── */
+function AIChatPanel({ isOpen, onClose, contextData, dataType, dataId }: any) {
+  const [messages, setMessages] = useState<{ role: 'user' | 'ai'; text: string }[]>([
+    { role: 'ai', text: '👋 Hi! I\'m your **Analytics Copilot**. Ask me anything about this data — patterns, insights, recommendations, or specific questions.' }
+  ]);
+  const [input, setInput] = useState('');
+  const [loading, setLoading] = useState(false);
+  const bottomRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    setMounted(true);
-    fetch('/api/forms').then(r=>r.json()).then(d=>{
-      const arr = Array.isArray(d)?d:(d.forms||[]);
-      setForms(arr); if(arr.length) setSelForm(arr[0].id);
-    }).catch(()=>{});
-    fetch('/api/datasets').then(r=>r.json()).then(d=>{
-      const arr = Array.isArray(d)?d:[];
-      setDatasets(arr); if(arr.length) setSelDs(arr[0].id);
-    }).catch(()=>{});
-    fetchOverview();
-  }, []);
+    bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages]);
 
-  // Auto-load when form selected
-  useEffect(() => { if(selForm && tab==='forms') loadForm(selForm); }, [selForm]);
-  // Auto-load when dataset selected
-  useEffect(() => { if(selDs && tab==='datasets') loadDs(selDs); }, [selDs]);
-
-  const fetchOverview = async () => {
-    try { const r=await fetch('/api/analytics'); setOverview(await r.json()); } catch{}
-  };
-
-  const callAI = async (type: string, context: any): Promise<string> => {
-    const r = await fetch('/api/ai/analyze', {
-      method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({ type, context })
-    });
-    const d = await r.json();
-    if(d.error) throw new Error(d.error);
-    return d.analysis;
-  };
-
-  const loadForm = async (id: string) => {
-    if(!id) return;
-    setLoading(true); setFormData(null); setGlobalAI(null); setQAI({}); setSubTab('summary');
+  const send = async () => {
+    if (!input.trim() || loading) return;
+    const q = input.trim();
+    setInput('');
+    setMessages(m => [...m, { role: 'user', text: q }]);
+    setLoading(true);
     try {
-      const r = await fetch(`/api/analytics/questions?formId=${id}`);
-      const d = await r.json();
-      setFormData(d);
-      // Auto global AI
-      setGlobalAILoading(true);
-      callAI('form_report', d).then(t=>setGlobalAI(t)).catch(()=>{}).finally(()=>setGlobalAILoading(false));
-      // Auto per-question AI
-      d.questions?.filter((q:any)=>q.totalAnswers>0).forEach((q:any)=>{
-        setQAILoading(p=>({...p,[q.fieldId]:true}));
-        callAI('question_insight', { label:q.label, type:q.type, totalAnswers:q.totalAnswers, chartData:q.chartData?.slice(0,10) })
-          .then(t=>setQAI(p=>({...p,[q.fieldId]:t})))
-          .catch(()=>{})
-          .finally(()=>setQAILoading(p=>({...p,[q.fieldId]:false})));
+      const res = await fetch('/api/ai/analyze/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          question: q,
+          datasetId: dataType === 'dataset' ? dataId : undefined,
+          formId: dataType === 'form' ? dataId : undefined,
+          context: contextData,
+          history: messages.map(m => ({ role: m.role === 'ai' ? 'assistant' : 'user', content: m.text }))
+        })
       });
-    } catch{} finally { setLoading(false); }
-  };
-
-  const loadDs = async (id: string) => {
-    if(!id) return;
-    setLoading(true); setDsData(null); setRawRows([]); setGlobalAI(null); setColAI({}); setSubTab('summary'); setExpandedCol(null);
-    try {
-      const [r1, r2] = await Promise.all([fetch(`/api/datasets/${id}/analytics`), fetch(`/api/datasets/${id}`)]);
-      const d1 = await r1.json();
-      const d2 = await r2.json();
-      setDsData(d1);
-      try { const rows=JSON.parse(d2.data||'[]'); setRawRows(Array.isArray(rows)?rows:[]); } catch{}
-      // Auto global AI
-      setGlobalAILoading(true);
-      callAI('dataset', d1).then(t=>setGlobalAI(t)).catch(()=>{}).finally(()=>setGlobalAILoading(false));
-      // Auto per-column AI for first 5 columns
-      d1.columns?.slice(0,5).forEach((col:any)=>{
-        setColAILoading(p=>({...p,[col.name]:true}));
-        callAI('column_insight', { name:col.name, type:col.type,
-          ...(col.type==='numeric' ? {min:col.min,max:col.max,mean:col.mean,median:col.median,std:col.std} : {uniqueCount:col.uniqueCount, topValues:col.topValues?.slice(0,5), missing:col.missing})
-        }).then(t=>setColAI(p=>({...p,[col.name]:t}))).catch(()=>{}).finally(()=>setColAILoading(p=>({...p,[col.name]:false})));
-      });
-    } catch{} finally { setLoading(false); }
-  };
-
-  const getColAIOnExpand = (col: any) => {
-    setExpandedCol(prev => prev===col.name ? null : col.name);
-    if (!colAI[col.name] && !colAILoading[col.name]) {
-      setColAILoading(p=>({...p,[col.name]:true}));
-      callAI('column_insight', { name:col.name, type:col.type,
-        ...(col.type==='numeric' ? {min:col.min,max:col.max,mean:col.mean,median:col.median,std:col.std} : {uniqueCount:col.uniqueCount, topValues:col.topValues?.slice(0,5), missing:col.missing})
-      }).then(t=>setColAI(p=>({...p,[col.name]:t}))).catch(()=>{}).finally(()=>setColAILoading(p=>({...p,[col.name]:false})));
+      const d = await res.json();
+      setMessages(m => [...m, { role: 'ai', text: d.answer || d.error || 'No response.' }]);
+    } catch {
+      setMessages(m => [...m, { role: 'ai', text: 'Connection error. Please try again.' }]);
     }
+    setLoading(false);
   };
 
-  /* ── Trend data ── */
-  const trendData = (() => {
-    const map = buildTrend(trendDays);
-    (formData?.submissions || []).forEach((s:any)=>{
-      const d = s.submittedAt?.split?.('T')?.[0];
-      if(d && map[d]!==undefined) map[d]++;
-    });
-    return Object.entries(map).map(([date,responses])=>({
-      date: new Date(date).toLocaleDateString('en-IN',{day:'numeric',month:'short'}),
-      responses
-    }));
-  })();
+  const suggestions = [
+    'What are the key trends?',
+    'Show me top patterns',
+    'Any anomalies or outliers?',
+    'Give me 3 recommendations',
+  ];
 
-  const trendGrowth = (() => {
-    if(trendData.length < 2) return 0;
-    const half = Math.floor(trendData.length/2);
-    const prev = trendData.slice(0,half).reduce((s,d)=>s+d.responses,0);
-    const curr = trendData.slice(half).reduce((s,d)=>s+d.responses,0);
-    if(!prev) return 100;
-    return Math.round(((curr-prev)/prev)*100);
-  })();
-
-  const numericCols = dsData?.columns?.filter((c:any)=>c.type==='numeric') || [];
-  const corrVal = corrA && corrB && rawRows.length ? pearson(rawRows,corrA,corrB) : null;
-  const scatterData = corrA && corrB
-    ? rawRows.slice(0,300).map((r:any)=>({x:parseFloat(r[corrA]),y:parseFloat(r[corrB])})).filter(p=>!isNaN(p.x)&&!isNaN(p.y))
-    : [];
-
-  /* ── SW detection ── */
-  const strengths: string[] = [], weaknesses: string[] = [];
-  if(formData) {
-    if(formData.totalSubmissions>50) strengths.push('High response volume ('+formData.totalSubmissions+' responses)');
-    if(formData.totalSubmissions<5)  weaknesses.push('Very low responses — only '+formData.totalSubmissions);
-    const answered = formData.questions?.filter((q:any)=>q.totalAnswers>0).length||0;
-    const total    = formData.questions?.length||1;
-    const rate     = Math.round((answered/total)*100);
-    if(rate>=80) strengths.push('High field engagement — '+rate+'% questions answered');
-    else         weaknesses.push('Low engagement — only '+rate+'% questions have responses');
-  }
-  if(dsData) {
-    if(dsData.rowCount>1000) strengths.push('Large dataset ('+dsData.rowCount.toLocaleString()+' rows) — statistically reliable');
-    if(dsData.rowCount<50)   weaknesses.push('Small sample size ('+dsData.rowCount+' rows) — low reliability');
-    if(numericCols.length>=2) strengths.push(numericCols.length+' numeric columns — correlation analysis possible');
-    const missing = dsData.columns?.filter((c:any)=>(c.missing||0)>0).length||0;
-    if(missing>0) weaknesses.push(missing+' columns have missing values');
-  }
-
-  /* ══ RENDER FORMS ══ */
-  const renderForms = () => (
-    <div>
-      <Card style={{ marginBottom:'1.5rem', display:'flex', alignItems:'center', gap:'1rem', flexWrap:'wrap' }}>
-        <ClipboardList size={16} style={{color:'rgba(255,255,255,0.5)'}}/>
-        <select value={selForm} onChange={e=>{setSelForm(e.target.value);}}
-          style={{ flex:1, minWidth:'200px', maxWidth:'400px', padding:'10px 14px',
-            background:'rgba(0,0,0,0.3)', border:'1px solid rgba(255,255,255,0.12)',
-            borderRadius:'10px', color:'#fff', fontSize:'0.875rem' }}>
-          {forms.length===0 ? <option>No forms yet</option>
-            : forms.map(f=><option key={f.id} value={f.id}>{f.title}</option>)}
-        </select>
-        <div style={{display:'flex',alignItems:'center',gap:'6px',fontSize:'0.78rem',color:'rgba(255,255,255,0.4)'}}>
-          <Zap size={13} color="#10b981"/> Auto-analyzing on select
-        </div>
-      </Card>
-
-      {loading && <div style={{textAlign:'center',padding:'4rem'}}><Loader2 size={36} style={{animation:'spin 1s linear infinite',color:'#6366f1'}}/></div>}
-
-      {formData && !loading && (<>
-        {/* Global AI Summary */}
-        <div style={{marginBottom:'1.5rem'}}>
-          <div style={{display:'flex',alignItems:'center',gap:'8px',marginBottom:'0.5rem'}}>
-            <BrainCircuit size={16} color="#a5b4fc"/>
-            <span style={{color:'#a5b4fc',fontWeight:600,fontSize:'0.9rem'}}>AI Overall Analysis</span>
-            <span style={{fontSize:'0.72rem',color:'rgba(255,255,255,0.3)'}}>— auto generated</span>
-          </div>
-          <AIBox text={globalAI} loading={globalAILoading}/>
-        </div>
-
-        {/* KPIs */}
-        <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(160px,1fr))',gap:'1rem',marginBottom:'1.5rem'}}>
-          <KPI label="Total Responses" value={formData.totalSubmissions} growth={trendGrowth}/>
-          <KPI label="Questions" value={formData.questions?.length||0} sub="in this form" color="#10b981"/>
-          <KPI label="Total Answers" value={formData.questions?.reduce((a:number,q:any)=>a+q.totalAnswers,0)||0} sub="all responses" color="#f59e0b"/>
-          <KPI label="Completion Rate"
-            value={formData.totalSubmissions>0 ? `${Math.round(((formData.questions?.filter((q:any)=>q.totalAnswers>0).length||0)/Math.max(formData.questions?.length||1,1))*100)}%` : '0%'}
-            sub="fields answered" color="#ec4899"/>
-        </div>
-
-        {/* Sub-tabs */}
-        <div style={{borderBottom:'1px solid rgba(255,255,255,0.07)',marginBottom:'1.5rem',display:'flex',gap:'0.25rem'}}>
-          {[{id:'summary',l:'Per Question'},{id:'trend',l:'Trend'},{id:'segment',l:'Segmentation'},{id:'sw',l:'Strengths & Weaknesses'}].map(t=>
-            <SubTabBtn key={t.id} active={subTab===t.id} onClick={()=>setSubTab(t.id)}>{t.l}</SubTabBtn>
-          )}
-        </div>
-
-        {/* Per Question */}
-        {subTab==='summary' && (
-          <div style={{display:'flex',flexDirection:'column',gap:'1.5rem'}}>
-            {formData.questions?.map((q:any,idx:number)=>(
-              <Card key={q.fieldId}>
-                <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:'0.75rem'}}>
-                  <div>
-                    <span style={{fontSize:'0.7rem',color:'rgba(255,255,255,0.3)',textTransform:'uppercase',letterSpacing:'0.06em'}}>
-                      Q{idx+1} · {q.type}
-                    </span>
-                    <h3 style={{color:'#fff',margin:'4px 0 0',fontSize:'1rem',fontWeight:600}}>{q.label}</h3>
-                    <Desc text={
-                      q.type==='text' ? 'Open-ended text question — responses collected but not charted.' :
-                      q.type==='rating' ? 'Rating scale question — shows how respondents rated this item.' :
-                      q.type==='dropdown' ? 'Dropdown selection — shows distribution of chosen options.' :
-                      q.type==='multiple_choice' ? 'Multiple choice — respondents could select multiple options.' :
-                      'Question response distribution shown below.'
-                    }/>
-                  </div>
-                  <div style={{textAlign:'right',flexShrink:0}}>
-                    <p style={{margin:0,fontSize:'1.5rem',fontWeight:700,color:'#6366f1'}}>{q.totalAnswers}</p>
-                    <p style={{margin:0,fontSize:'0.7rem',color:'rgba(255,255,255,0.4)'}}>responses</p>
-                    <p style={{margin:'2px 0 0',fontSize:'0.7rem',color: formData.totalSubmissions>0 ? '#10b981' : 'rgba(255,255,255,0.3)'}}>
-                      {formData.totalSubmissions>0 ? Math.round((q.totalAnswers/formData.totalSubmissions)*100)+'% rate' : '—'}
-                    </p>
-                  </div>
-                </div>
-
-                {q.chartData?.length>0 && mounted ? (
-                  <div style={{display:'grid',gridTemplateColumns:q.chartData.length<=5?'1fr 1fr':'1fr',gap:'1rem'}}>
-                    <div>
-                      <p style={{fontSize:'0.72rem',color:'rgba(255,255,255,0.35)',marginBottom:'0.4rem'}}>Response Distribution</p>
-                      <ResponsiveContainer width="100%" height={200}>
-                        <BarChart data={q.chartData} layout="vertical">
-                          <XAxis type="number" stroke="#a1a1aa" fontSize={11} allowDecimals={false}/>
-                          <YAxis type="category" dataKey="name" stroke="#a1a1aa" fontSize={10} width={90}/>
-                          <Tooltip contentStyle={{backgroundColor:'#18181b',borderColor:'rgba(255,255,255,0.1)',borderRadius:'8px'}}/>
-                          <Bar dataKey="value" radius={[0,6,6,0]}>
-                            {q.chartData.map((_:any,i:number)=><Cell key={i} fill={COLORS[i%COLORS.length]}/>)}
-                          </Bar>
-                        </BarChart>
-                      </ResponsiveContainer>
-                    </div>
-                    {q.chartData.length<=8 && (
-                      <div>
-                        <p style={{fontSize:'0.72rem',color:'rgba(255,255,255,0.35)',marginBottom:'0.4rem'}}>Share %</p>
-                        <ResponsiveContainer width="100%" height={200}>
-                          <PieChart>
-                            <Pie data={q.chartData} dataKey="value" nameKey="name" innerRadius={45} outerRadius={75}>
-                              {q.chartData.map((_:any,i:number)=><Cell key={i} fill={COLORS[i%COLORS.length]}/>)}
-                            </Pie>
-                            <Tooltip contentStyle={{backgroundColor:'#18181b',borderColor:'rgba(255,255,255,0.1)',borderRadius:'8px'}}/>
-                            <Legend formatter={v=><span style={{color:'rgba(255,255,255,0.6)',fontSize:'0.72rem'}}>{v}</span>}/>
-                          </PieChart>
-                        </ResponsiveContainer>
-                      </div>
-                    )}
-                  </div>
-                ) : (
-                  <div style={{padding:'1rem',background:'rgba(255,255,255,0.02)',borderRadius:'8px',
-                    color:'rgba(255,255,255,0.3)',fontSize:'0.82rem',textAlign:'center'}}>
-                    {q.totalAnswers===0 ? 'No responses yet for this question.' : 'Open-ended responses — individual answers collected, no chart available.'}
-                  </div>
-                )}
-
-                {/* Per-question AI insight */}
-                <AIBox text={qAI[q.fieldId]} loading={qAILoading[q.fieldId]||false}/>
-              </Card>
-            ))}
-          </div>
-        )}
-
-        {/* Trend */}
-        {subTab==='trend' && (
-          <Card>
-            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'0.75rem',flexWrap:'wrap',gap:'0.5rem'}}>
-              <div>
-                <h3 style={{margin:0,color:'rgba(255,255,255,0.8)',fontSize:'0.95rem'}}>Response Trend Over Time</h3>
-                <Desc text="Shows how many responses were collected per day. Spikes indicate high activity periods."/>
-                <span style={{fontSize:'0.78rem',color:trendGrowth>=0?'#10b981':'#ef4444',marginTop:'4px',display:'block'}}>
-                  {trendGrowth>=0?'+':''}{trendGrowth}% vs previous period
-                </span>
-              </div>
-              <div style={{display:'flex',gap:'6px'}}>
-                {[7,14,30].map(d=>(
-                  <button key={d} onClick={()=>setTrendDays(d)}
-                    style={{padding:'4px 12px',borderRadius:'8px',border:'1px solid',
-                      borderColor:trendDays===d?'#6366f1':'rgba(255,255,255,0.1)',
-                      background:trendDays===d?'rgba(99,102,241,0.2)':'none',
-                      color:trendDays===d?'#a5b4fc':'rgba(255,255,255,0.5)',cursor:'pointer',fontSize:'0.78rem'}}>
-                    {d}d
-                  </button>
-                ))}
-              </div>
-            </div>
-            {mounted && (
-              <ResponsiveContainer width="100%" height={250}>
-                <LineChart data={trendData}>
-                  <CartesianGrid strokeDasharray="3 3" opacity={0.05}/>
-                  <XAxis dataKey="date" stroke="#a1a1aa" fontSize={10}/>
-                  <YAxis stroke="#a1a1aa" fontSize={11} allowDecimals={false}/>
-                  <Tooltip contentStyle={{backgroundColor:'#18181b',borderColor:'rgba(255,255,255,0.1)',borderRadius:'8px'}}/>
-                  <Line type="monotone" dataKey="responses" stroke="#6366f1" strokeWidth={2} dot={false} activeDot={{r:4,fill:'#6366f1'}}/>
-                </LineChart>
-              </ResponsiveContainer>
-            )}
-          </Card>
-        )}
-
-        {/* Segmentation */}
-        {subTab==='segment' && (
-          <div>
-            <p style={{color:'rgba(255,255,255,0.45)',fontSize:'0.85rem',marginBottom:'1rem'}}>
-              Category breakdown per question — shows which options are most popular among respondents.
-            </p>
-            <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(300px,1fr))',gap:'1rem'}}>
-              {formData.questions?.filter((q:any)=>q.chartData?.length>0).slice(0,6).map((q:any,i:number)=>(
-                <Card key={i}>
-                  <h4 style={{color:'rgba(255,255,255,0.8)',fontSize:'0.875rem',marginBottom:'0.25rem'}}>{q.label}</h4>
-                  <Desc text={`${q.totalAnswers} responses · Top: "${q.chartData[0]?.name}" with ${q.chartData[0]?.value} votes`}/>
-                  {mounted && (
-                    <ResponsiveContainer width="100%" height={180} style={{marginTop:'0.75rem'}}>
-                      <BarChart data={q.chartData.slice(0,6)}>
-                        <XAxis dataKey="name" stroke="#a1a1aa" fontSize={9}/>
-                        <YAxis stroke="#a1a1aa" fontSize={10} allowDecimals={false}/>
-                        <Tooltip contentStyle={{backgroundColor:'#18181b',borderColor:'rgba(255,255,255,0.1)',borderRadius:'8px'}}/>
-                        <Bar dataKey="value" radius={[4,4,0,0]}>
-                          {q.chartData.slice(0,6).map((_:any,j:number)=><Cell key={j} fill={COLORS[j%COLORS.length]}/>)}
-                        </Bar>
-                      </BarChart>
-                    </ResponsiveContainer>
-                  )}
-                </Card>
-              ))}
-              {!formData.questions?.some((q:any)=>q.chartData?.length>0) && (
-                <Card style={{textAlign:'center',padding:'3rem',color:'rgba(255,255,255,0.4)'}}>No categorical data for segmentation.</Card>
-              )}
-            </div>
-          </div>
-        )}
-
-        {/* S&W */}
-        {subTab==='sw' && (
-          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'1rem'}}>
-            <Card style={{background:'rgba(16,185,129,0.05)',borderColor:'rgba(16,185,129,0.2)'}}>
-              <h3 style={{color:'#10b981',display:'flex',alignItems:'center',gap:'8px',marginBottom:'1rem'}}>
-                <CheckCircle size={16}/> Strengths
-              </h3>
-              {strengths.length===0
-                ? <p style={{color:'rgba(255,255,255,0.4)',fontSize:'0.85rem'}}>Load more data to detect strengths.</p>
-                : strengths.map((s,i)=>(
-                    <div key={i} style={{display:'flex',gap:'8px',marginBottom:'0.5rem',alignItems:'flex-start'}}>
-                      <CheckCircle size={13} color="#10b981" style={{flexShrink:0,marginTop:'2px'}}/>
-                      <span style={{fontSize:'0.85rem',color:'rgba(255,255,255,0.75)'}}>{s}</span>
-                    </div>
-                  ))}
-            </Card>
-            <Card style={{background:'rgba(239,68,68,0.05)',borderColor:'rgba(239,68,68,0.2)'}}>
-              <h3 style={{color:'#ef4444',display:'flex',alignItems:'center',gap:'8px',marginBottom:'1rem'}}>
-                <AlertCircle size={16}/> Weaknesses
-              </h3>
-              {weaknesses.length===0
-                ? <p style={{color:'rgba(255,255,255,0.4)',fontSize:'0.85rem'}}>No significant weaknesses detected.</p>
-                : weaknesses.map((w,i)=>(
-                    <div key={i} style={{display:'flex',gap:'8px',marginBottom:'0.5rem',alignItems:'flex-start'}}>
-                      <AlertCircle size={13} color="#ef4444" style={{flexShrink:0,marginTop:'2px'}}/>
-                      <span style={{fontSize:'0.85rem',color:'rgba(255,255,255,0.75)'}}>{w}</span>
-                    </div>
-                  ))}
-            </Card>
-          </div>
-        )}
-      </>)}
-
-      {!formData && !loading && (
-        <Card style={{textAlign:'center',padding:'4rem'}}>
-          <ClipboardList size={40} style={{color:'rgba(255,255,255,0.2)',marginBottom:'1rem'}}/>
-          <p style={{color:'rgba(255,255,255,0.4)'}}>Form select karo — analytics automatically load ho jaayegi</p>
-        </Card>
-      )}
-    </div>
-  );
-
-  /* ══ RENDER DATASETS ══ */
-  const renderDatasets = () => (
-    <div>
-      <Card style={{marginBottom:'1.5rem',display:'flex',alignItems:'center',gap:'1rem',flexWrap:'wrap'}}>
-        <Database size={16} style={{color:'rgba(255,255,255,0.5)'}}/>
-        <select value={selDs} onChange={e=>setSelDs(e.target.value)}
-          style={{flex:1,minWidth:'200px',maxWidth:'400px',padding:'10px 14px',
-            background:'rgba(0,0,0,0.3)',border:'1px solid rgba(255,255,255,0.12)',
-            borderRadius:'10px',color:'#fff',fontSize:'0.875rem'}}>
-          {datasets.length===0 ? <option>No datasets uploaded</option>
-            : datasets.map(d=><option key={d.id} value={d.id}>{d.filename}</option>)}
-        </select>
-        <div style={{display:'flex',alignItems:'center',gap:'6px',fontSize:'0.78rem',color:'rgba(255,255,255,0.4)'}}>
-          <Zap size={13} color="#10b981"/> Auto-analyzing on select
-        </div>
-      </Card>
-
-      {loading && <div style={{textAlign:'center',padding:'4rem'}}><Loader2 size={36} style={{animation:'spin 1s linear infinite',color:'#10b981'}}/></div>}
-
-      {dsData && !loading && (<>
-        {/* Global AI */}
-        <div style={{marginBottom:'1.5rem'}}>
-          <div style={{display:'flex',alignItems:'center',gap:'8px',marginBottom:'0.5rem'}}>
-            <BrainCircuit size={16} color="#a5b4fc"/>
-            <span style={{color:'#a5b4fc',fontWeight:600,fontSize:'0.9rem'}}>AI Dataset Analysis</span>
-            <span style={{fontSize:'0.72rem',color:'rgba(255,255,255,0.3)'}}>— auto generated</span>
-          </div>
-          <AIBox text={globalAI} loading={globalAILoading}/>
-        </div>
-
-        {/* KPIs */}
-        <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(150px,1fr))',gap:'1rem',marginBottom:'1.5rem'}}>
-          <KPI label="Total Rows"    value={dsData.rowCount?.toLocaleString()} sub={dsData.filename} color="#10b981"/>
-          <KPI label="Columns"       value={dsData.columnCount} sub="total fields" color="#06b6d4"/>
-          <KPI label="Numeric Cols"  value={dsData.columns?.filter((c:any)=>c.type==='numeric').length} sub="numeric" color="#f59e0b"/>
-          <KPI label="Categorical"   value={dsData.columns?.filter((c:any)=>c.type==='categorical').length} sub="categorical" color="#ec4899"/>
-        </div>
-
-        {/* Sub-tabs */}
-        <div style={{borderBottom:'1px solid rgba(255,255,255,0.07)',marginBottom:'1.5rem',display:'flex',gap:'0.25rem'}}>
-          {[{id:'summary',l:'Columns'},{id:'correlation',l:'Correlation'},{id:'sw',l:'Strengths & Weaknesses'}].map(t=>
-            <SubTabBtn key={t.id} active={subTab===t.id} onClick={()=>setSubTab(t.id)}>{t.l}</SubTabBtn>
-          )}
-        </div>
-
-        {/* Columns */}
-        {subTab==='summary' && (
-          <div style={{display:'flex',flexDirection:'column',gap:'1rem'}}>
-            {dsData.columns?.map((col:any,idx:number)=>{
-              const isExp = expandedCol===col.name;
-              return (
-                <Card key={col.name}>
-                  <button onClick={()=>getColAIOnExpand(col)}
-                    style={{width:'100%',background:'none',border:'none',cursor:'pointer',
-                      display:'flex',justifyContent:'space-between',alignItems:'center',padding:0}}>
-                    <div style={{display:'flex',alignItems:'center',gap:'12px'}}>
-                      <span style={{fontSize:'0.65rem',padding:'2px 8px',borderRadius:'6px',fontWeight:700,
-                        background:col.type==='numeric'?'rgba(16,185,129,0.15)':'rgba(245,158,11,0.15)',
-                        color:col.type==='numeric'?'#10b981':'#f59e0b'}}>
-                        {col.type==='numeric'?'123':'ABC'}
-                      </span>
-                      <span style={{color:'#fff',fontWeight:600,fontSize:'0.95rem'}}>{col.name}</span>
-                    </div>
-                    <div style={{display:'flex',alignItems:'center',gap:'1rem'}}>
-                      {col.type==='numeric'
-                        ? <span style={{fontSize:'0.78rem',color:'rgba(255,255,255,0.4)'}}>
-                            avg <b style={{color:'#10b981'}}>{col.mean}</b> · range {col.min}–{col.max}
-                          </span>
-                        : <span style={{fontSize:'0.78rem',color:'rgba(255,255,255,0.4)'}}>
-                            {col.uniqueCount} unique · top: "{col.topValues?.[0]?.name}"
-                          </span>}
-                      {isExp ? <ChevronUp size={15} color="rgba(255,255,255,0.35)"/> : <ChevronDown size={15} color="rgba(255,255,255,0.35)"/>}
-                    </div>
-                  </button>
-
-                  {/* Collapsed: show AI inline */}
-                  {!isExp && (colAI[col.name] || colAILoading[col.name]) && (
-                    <AIBox text={colAI[col.name]} loading={colAILoading[col.name]||false}/>
-                  )}
-
-                  {isExp && mounted && (
-                    <div style={{marginTop:'1.25rem',borderTop:'1px solid rgba(255,255,255,0.07)',paddingTop:'1.25rem'}}>
-                      {col.type==='numeric' ? (<>
-                        {/* Stats */}
-                        <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(100px,1fr))',gap:'0.75rem',marginBottom:'1.25rem'}}>
-                          {[['Min',col.min,'#6366f1','Lowest value in this column'],
-                            ['Max',col.max,'#ec4899','Highest value'],
-                            ['Mean',col.mean,'#10b981','Average value'],
-                            ['Median',col.median,'#f59e0b','Middle value (less affected by outliers)'],
-                            ['Std Dev',col.std,'#8b5cf6','Spread of values — higher = more variation']].map(([l,v,c,d])=>(
-                            <div key={String(l)} style={{background:'rgba(255,255,255,0.04)',borderRadius:'8px',padding:'0.75rem'}}>
-                              <p style={{margin:0,fontSize:'0.68rem',color:'rgba(255,255,255,0.4)'}}>{l}</p>
-                              <p style={{margin:'4px 0 2px',fontSize:'1.1rem',fontWeight:700,color:String(c)}}>{v}</p>
-                              <p style={{margin:0,fontSize:'0.65rem',color:'rgba(255,255,255,0.3)',lineHeight:1.3}}>{d}</p>
-                            </div>
-                          ))}
-                        </div>
-                        {/* Histogram */}
-                        <p style={{fontSize:'0.75rem',color:'rgba(255,255,255,0.4)',marginBottom:'0.5rem'}}>
-                          Histogram — shows frequency distribution of values
-                        </p>
-                        <ResponsiveContainer width="100%" height={180}>
-                          <BarChart data={col.histogram}>
-                            <CartesianGrid strokeDasharray="3 3" opacity={0.05}/>
-                            <XAxis dataKey="range" stroke="#a1a1aa" fontSize={9} angle={-30} textAnchor="end" height={50}/>
-                            <YAxis stroke="#a1a1aa" fontSize={10} allowDecimals={false}/>
-                            <Tooltip contentStyle={{backgroundColor:'#18181b',borderColor:'rgba(255,255,255,0.1)',borderRadius:'8px'}}/>
-                            <Bar dataKey="count" fill={COLORS[idx%COLORS.length]} radius={[4,4,0,0]}/>
-                          </BarChart>
-                        </ResponsiveContainer>
-                      </>) : (<>
-                        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'1rem'}}>
-                          <div>
-                            <p style={{fontSize:'0.72rem',color:'rgba(255,255,255,0.35)',marginBottom:'0.5rem'}}>
-                              Top values — most frequent categories
-                            </p>
-                            <ResponsiveContainer width="100%" height={180}>
-                              <BarChart data={col.topValues?.slice(0,8)} layout="vertical">
-                                <XAxis type="number" stroke="#a1a1aa" fontSize={10} allowDecimals={false}/>
-                                <YAxis type="category" dataKey="name" stroke="#a1a1aa" fontSize={10} width={80}/>
-                                <Tooltip contentStyle={{backgroundColor:'#18181b',borderColor:'rgba(255,255,255,0.1)',borderRadius:'8px'}}/>
-                                <Bar dataKey="value" radius={[0,4,4,0]}>
-                                  {col.topValues?.slice(0,8).map((_:any,i:number)=><Cell key={i} fill={COLORS[i%COLORS.length]}/>)}
-                                </Bar>
-                              </BarChart>
-                            </ResponsiveContainer>
-                          </div>
-                          <div>
-                            <p style={{fontSize:'0.72rem',color:'rgba(255,255,255,0.35)',marginBottom:'0.5rem'}}>
-                              Share distribution (pie)
-                            </p>
-                            <ResponsiveContainer width="100%" height={180}>
-                              <PieChart>
-                                <Pie data={col.topValues?.slice(0,6)} dataKey="value" nameKey="name" innerRadius={35} outerRadius={65}>
-                                  {col.topValues?.slice(0,6).map((_:any,i:number)=><Cell key={i} fill={COLORS[i%COLORS.length]}/>)}
-                                </Pie>
-                                <Tooltip contentStyle={{backgroundColor:'#18181b',borderColor:'rgba(255,255,255,0.1)',borderRadius:'8px'}}/>
-                                <Legend formatter={v=><span style={{color:'rgba(255,255,255,0.6)',fontSize:'0.72rem'}}>{v}</span>}/>
-                              </PieChart>
-                            </ResponsiveContainer>
-                          </div>
-                        </div>
-                        <div style={{marginTop:'0.75rem',display:'flex',gap:'0.75rem',flexWrap:'wrap'}}>
-                          <span style={{fontSize:'0.78rem',color:'rgba(255,255,255,0.4)'}}>
-                            Total: <b style={{color:'#fff'}}>{col.count}</b>
-                          </span>
-                          <span style={{fontSize:'0.78rem',color:'rgba(255,255,255,0.4)'}}>
-                            Unique values: <b style={{color:'#f59e0b'}}>{col.uniqueCount}</b>
-                          </span>
-                          <span style={{fontSize:'0.78rem',color:'rgba(255,255,255,0.4)'}}>
-                            Missing: <b style={{color:col.missing>0?'#ef4444':'#10b981'}}>{col.missing}</b>
-                          </span>
-                        </div>
-                      </>)}
-                      {/* AI insight */}
-                      <AIBox text={colAI[col.name]} loading={colAILoading[col.name]||false}/>
-                    </div>
-                  )}
-                </Card>
-              );
-            })}
-          </div>
-        )}
-
-        {/* Correlation */}
-        {subTab==='correlation' && (
-          <div>
-            {numericCols.length<2 ? (
-              <Card style={{textAlign:'center',padding:'3rem',color:'rgba(255,255,255,0.4)'}}>
-                <GitBranch size={32} style={{marginBottom:'1rem',opacity:0.3}}/>
-                <p>Correlation ke liye kam se kam 2 numeric columns chahiye.</p>
-              </Card>
-            ) : (<>
-              <Card style={{marginBottom:'1rem'}}>
-                <h3 style={{color:'rgba(255,255,255,0.8)',fontSize:'0.95rem',margin:'0 0 0.5rem'}}>Correlation Analysis</h3>
-                <p style={{color:'rgba(255,255,255,0.4)',fontSize:'0.82rem',margin:'0 0 1rem',lineHeight:1.5}}>
-                  Do numeric columns ke beech relationship dekhne ke liye use hota hai. Pearson r value:
-                  +1 = perfect positive, -1 = perfect negative, 0 = no relationship.
-                </p>
-                <div style={{display:'flex',gap:'1rem',flexWrap:'wrap',alignItems:'center'}}>
-                  <div>
-                    <label style={{fontSize:'0.72rem',color:'rgba(255,255,255,0.4)',display:'block',marginBottom:'4px'}}>Column A (X-axis)</label>
-                    <select value={corrA} onChange={e=>setCorrA(e.target.value)}
-                      style={{padding:'8px 12px',background:'rgba(0,0,0,0.3)',border:'1px solid rgba(255,255,255,0.12)',borderRadius:'8px',color:'#fff',fontSize:'0.875rem'}}>
-                      <option value="">Select</option>
-                      {numericCols.map((c:any)=><option key={c.name} value={c.name}>{c.name}</option>)}
-                    </select>
-                  </div>
-                  <div>
-                    <label style={{fontSize:'0.72rem',color:'rgba(255,255,255,0.4)',display:'block',marginBottom:'4px'}}>Column B (Y-axis)</label>
-                    <select value={corrB} onChange={e=>setCorrB(e.target.value)}
-                      style={{padding:'8px 12px',background:'rgba(0,0,0,0.3)',border:'1px solid rgba(255,255,255,0.12)',borderRadius:'8px',color:'#fff',fontSize:'0.875rem'}}>
-                      <option value="">Select</option>
-                      {numericCols.filter((c:any)=>c.name!==corrA).map((c:any)=><option key={c.name} value={c.name}>{c.name}</option>)}
-                    </select>
-                  </div>
-                  {corrVal!==null && (
-                    <div style={{padding:'10px 18px',background:'rgba(99,102,241,0.15)',border:'1px solid #6366f1',borderRadius:'10px'}}>
-                      <p style={{margin:0,fontSize:'0.7rem',color:'rgba(255,255,255,0.5)'}}>Pearson r</p>
-                      <p style={{margin:'2px 0 0',fontSize:'1.5rem',fontWeight:700,
-                        color:Math.abs(corrVal)>0.7?'#10b981':Math.abs(corrVal)>0.4?'#f59e0b':'#ef4444'}}>
-                        {corrVal}
-                      </p>
-                      <p style={{margin:'2px 0 0',fontSize:'0.72rem',color:'rgba(255,255,255,0.4)'}}>
-                        {Math.abs(corrVal)>0.7?'Strong':Math.abs(corrVal)>0.4?'Moderate':'Weak'} {corrVal>0?'positive':'negative'} correlation
-                      </p>
-                    </div>
-                  )}
-                </div>
-              </Card>
-              {scatterData.length>0 && mounted && (
-                <Card>
-                  <h3 style={{color:'rgba(255,255,255,0.8)',fontSize:'0.9rem',margin:'0 0 0.5rem'}}>
-                    Scatter Plot: {corrA} vs {corrB}
-                  </h3>
-                  <p style={{color:'rgba(255,255,255,0.4)',fontSize:'0.78rem',margin:'0 0 0.75rem'}}>
-                    Har point ek data row hai. Agar points ek line mein hain toh strong correlation hai.
-                  </p>
-                  <ResponsiveContainer width="100%" height={300}>
-                    <ScatterChart>
-                      <CartesianGrid strokeDasharray="3 3" opacity={0.05}/>
-                      <XAxis dataKey="x" name={corrA} stroke="#a1a1aa" fontSize={11}/>
-                      <YAxis dataKey="y" name={corrB} stroke="#a1a1aa" fontSize={11}/>
-                      <Tooltip cursor={{strokeDasharray:'3 3'}} contentStyle={{backgroundColor:'#18181b',borderColor:'rgba(255,255,255,0.1)',borderRadius:'8px'}}/>
-                      <Scatter data={scatterData} fill="#6366f1" opacity={0.7}/>
-                    </ScatterChart>
-                  </ResponsiveContainer>
-                </Card>
-              )}
-            </>)}
-          </div>
-        )}
-
-        {/* S&W */}
-        {subTab==='sw' && (
-          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'1rem'}}>
-            <Card style={{background:'rgba(16,185,129,0.05)',borderColor:'rgba(16,185,129,0.2)'}}>
-              <h3 style={{color:'#10b981',display:'flex',alignItems:'center',gap:'8px',marginBottom:'1rem'}}>
-                <CheckCircle size={16}/> Strengths
-              </h3>
-              {strengths.length===0
-                ? <p style={{color:'rgba(255,255,255,0.4)',fontSize:'0.85rem'}}>No significant strengths detected.</p>
-                : strengths.map((s,i)=>(
-                    <div key={i} style={{display:'flex',gap:'8px',marginBottom:'0.5rem'}}>
-                      <CheckCircle size={13} color="#10b981" style={{flexShrink:0,marginTop:'2px'}}/>
-                      <span style={{fontSize:'0.85rem',color:'rgba(255,255,255,0.75)'}}>{s}</span>
-                    </div>
-                  ))}
-            </Card>
-            <Card style={{background:'rgba(239,68,68,0.05)',borderColor:'rgba(239,68,68,0.2)'}}>
-              <h3 style={{color:'#ef4444',display:'flex',alignItems:'center',gap:'8px',marginBottom:'1rem'}}>
-                <AlertCircle size={16}/> Weaknesses
-              </h3>
-              {weaknesses.length===0
-                ? <p style={{color:'rgba(255,255,255,0.4)',fontSize:'0.85rem'}}>No significant issues detected.</p>
-                : weaknesses.map((w,i)=>(
-                    <div key={i} style={{display:'flex',gap:'8px',marginBottom:'0.5rem'}}>
-                      <AlertCircle size={13} color="#ef4444" style={{flexShrink:0,marginTop:'2px'}}/>
-                      <span style={{fontSize:'0.85rem',color:'rgba(255,255,255,0.75)'}}>{w}</span>
-                    </div>
-                  ))}
-            </Card>
-          </div>
-        )}
-      </>)}
-
-      {!dsData && !loading && (
-        <Card style={{textAlign:'center',padding:'4rem'}}>
-          <Database size={40} style={{color:'rgba(255,255,255,0.2)',marginBottom:'1rem'}}/>
-          <p style={{color:'rgba(255,255,255,0.4)'}}>Dataset select karo — analytics automatically load ho jaayegi</p>
-        </Card>
-      )}
-    </div>
-  );
-
-  /* ══ RENDER OVERVIEW ══ */
-  const renderOverview = () => (
-    <div>
-      {overview ? (<>
-        <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(150px,1fr))',gap:'1rem',marginBottom:'1.5rem'}}>
-          <KPI label="Total Forms"     value={overview.kpis?.totalForms}      sub="created"/>
-          <KPI label="Form Responses"  value={overview.kpis?.totalSubmissions} sub="submissions" color="#10b981"/>
-          <KPI label="Datasets"        value={overview.kpis?.totalDatasets}    sub="uploaded" color="#f59e0b"/>
-          <KPI label="Total Data Rows" value={overview.kpis?.totalRows}        sub="across all" color="#ec4899"/>
-        </div>
-
-        <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(340px,1fr))',gap:'1.5rem'}}>
-          <Card>
-            <h3 style={{color:'rgba(255,255,255,0.8)',fontSize:'0.95rem',margin:'0 0 0.25rem'}}>Activity Trend (7 days)</h3>
-            <p style={{color:'rgba(255,255,255,0.35)',fontSize:'0.78rem',margin:'0 0 0.75rem'}}>
-              Platform pe kitne events (submissions + uploads) har din hue
-            </p>
-            {mounted && (
-              <ResponsiveContainer width="100%" height={200}>
-                <LineChart data={overview.chartData||[]}>
-                  <CartesianGrid strokeDasharray="3 3" opacity={0.05}/>
-                  <XAxis dataKey="date" stroke="#a1a1aa" fontSize={11}/>
-                  <YAxis stroke="#a1a1aa" fontSize={11} allowDecimals={false}/>
-                  <Tooltip contentStyle={{backgroundColor:'#18181b',borderColor:'rgba(255,255,255,0.1)',borderRadius:'8px'}}/>
-                  <Line type="monotone" dataKey="events" stroke="#6366f1" strokeWidth={2} dot={{fill:'#6366f1',r:3}}/>
-                </LineChart>
-              </ResponsiveContainer>
-            )}
-          </Card>
-          <Card>
-            <h3 style={{color:'rgba(255,255,255,0.8)',fontSize:'0.95rem',margin:'0 0 0.25rem'}}>Data Source Mix</h3>
-            <p style={{color:'rgba(255,255,255,0.35)',fontSize:'0.78rem',margin:'0 0 0.75rem'}}>
-              Kitna data forms se aaya aur kitna file uploads se
-            </p>
-            {mounted && (
-              <ResponsiveContainer width="100%" height={200}>
-                <PieChart>
-                  <Pie data={overview.sourceBreakdown||[]} dataKey="value" nameKey="name" innerRadius={55} outerRadius={85}>
-                    {(overview.sourceBreakdown||[]).map((_:any,i:number)=><Cell key={i} fill={COLORS[i%COLORS.length]}/>)}
-                  </Pie>
-                  <Tooltip contentStyle={{backgroundColor:'#18181b',borderColor:'rgba(255,255,255,0.1)',borderRadius:'8px'}}/>
-                  <Legend formatter={v=><span style={{color:'rgba(255,255,255,0.7)',fontSize:'0.8rem'}}>{v}</span>}/>
-                </PieChart>
-              </ResponsiveContainer>
-            )}
-          </Card>
-        </div>
-
-        {overview.recentForms?.length>0 && (
-          <Card style={{marginTop:'1.5rem'}}>
-            <h3 style={{color:'rgba(255,255,255,0.8)',fontSize:'0.95rem',margin:'0 0 0.25rem'}}>Recent Forms</h3>
-            <p style={{color:'rgba(255,255,255,0.35)',fontSize:'0.78rem',margin:'0 0 0.75rem'}}>
-              Latest forms aur unke response counts
-            </p>
-            <table style={{width:'100%',borderCollapse:'collapse',fontSize:'0.875rem'}}>
-              <thead>
-                <tr>{['Form','Responses','Created'].map(h=>(
-                  <th key={h} style={{padding:'8px 12px',textAlign:'left',color:'rgba(255,255,255,0.35)',
-                    borderBottom:'1px solid rgba(255,255,255,0.07)',fontSize:'0.72rem',textTransform:'uppercase'}}>{h}</th>
-                ))}</tr>
-              </thead>
-              <tbody>
-                {overview.recentForms.map((f:any)=>(
-                  <tr key={f.id} style={{borderBottom:'1px solid rgba(255,255,255,0.04)'}}>
-                    <td style={{padding:'10px 12px',color:'rgba(255,255,255,0.8)'}}>{f.title}</td>
-                    <td style={{padding:'10px 12px',color:'#6366f1',fontWeight:600}}>{f._count.submissions}</td>
-                    <td style={{padding:'10px 12px',color:'rgba(255,255,255,0.4)'}}>{new Date(f.createdAt).toLocaleDateString()}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </Card>
-        )}
-      </>) : (
-        <div style={{textAlign:'center',padding:'4rem'}}>
-          <Loader2 size={36} style={{animation:'spin 1s linear infinite',color:'#6366f1'}}/>
-        </div>
-      )}
-    </div>
-  );
+  if (!isOpen) return null;
 
   return (
-    <div style={{padding:'1.5rem',maxWidth:'1200px',margin:'0 auto',width:'100%',boxSizing:'border-box'}}>
-      <div style={{marginBottom:'1.5rem'}}>
-        <h1 style={{fontSize:'1.6rem',fontWeight:700,color:'#fff',margin:0}}>Analytics</h1>
-        <p style={{color:'rgba(255,255,255,0.4)',margin:'4px 0 0',fontSize:'0.875rem'}}>
-          Select karo — AI automatically analyze karke descriptions dega
-        </p>
+    <div style={{
+      position: 'fixed', right: 0, top: 0, bottom: 0, width: 400,
+      background: T.surface, borderLeft: `1px solid ${T.border}`,
+      display: 'flex', flexDirection: 'column', zIndex: 1000,
+      boxShadow: '-8px 0 40px rgba(0,0,0,0.5)',
+    }}>
+      {/* Header */}
+      <div style={{
+        padding: '1rem 1.25rem',
+        borderBottom: `1px solid ${T.border}`,
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        background: `linear-gradient(135deg, ${T.card}, ${T.surface})`,
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <div style={{
+            width: 36, height: 36, borderRadius: 10,
+            background: `linear-gradient(135deg, ${T.accent}, ${T.accent2})`,
+            display: 'flex', alignItems: 'center', justifyContent: 'center'
+          }}>
+            <Bot size={18} color="#fff" />
+          </div>
+          <div>
+            <p style={{ margin: 0, fontSize: '0.9rem', fontWeight: 700, color: T.text }}>Analytics Copilot</p>
+            <p style={{ margin: 0, fontSize: '0.7rem', color: T.green }}>● Agentic AI Active</p>
+          </div>
+        </div>
+        <button onClick={onClose} style={{ background: 'none', border: 'none', color: T.muted, cursor: 'pointer', padding: 4 }}>
+          <X size={18} />
+        </button>
       </div>
 
-      <div style={{display:'flex',gap:'0.5rem',marginBottom:'1.5rem',
-        borderBottom:'1px solid rgba(255,255,255,0.07)'}}>
-        {([
-          {id:'forms',    label:'Form Analytics',    icon:<ClipboardList size={15}/>},
-          {id:'datasets', label:'Dataset Analytics', icon:<Database size={15}/>},
-          {id:'overview', label:'Platform Overview', icon:<Globe size={15}/>},
-        ] as const).map(t=>(
-          <button key={t.id} onClick={()=>{setTab(t.id);setSubTab('summary');setGlobalAI(null);}}
-            style={{display:'flex',alignItems:'center',gap:'6px',padding:'10px 18px',
-              background:'none',border:'none',
-              borderBottom:tab===t.id?'2px solid #6366f1':'2px solid transparent',
-              color:tab===t.id?'#a5b4fc':'rgba(255,255,255,0.45)',
-              cursor:'pointer',fontWeight:tab===t.id?600:400,fontSize:'0.875rem',
-              marginBottom:'-1px',transition:'all 0.2s'}}>
-            {t.icon} {t.label}
+      {/* Messages */}
+      <div style={{ flex: 1, overflowY: 'auto', padding: '1rem', display: 'flex', flexDirection: 'column', gap: 12 }}>
+        {messages.map((m, i) => (
+          <div key={i} style={{ display: 'flex', gap: 10, alignItems: 'flex-start', flexDirection: m.role === 'user' ? 'row-reverse' : 'row' }}>
+            <div style={{
+              width: 28, height: 28, borderRadius: 8, flexShrink: 0,
+              background: m.role === 'ai' ? `linear-gradient(135deg, ${T.accent}, ${T.accent2})` : T.card,
+              border: m.role === 'user' ? `1px solid ${T.border}` : 'none',
+              display: 'flex', alignItems: 'center', justifyContent: 'center'
+            }}>
+              {m.role === 'ai' ? <Bot size={14} color="#fff" /> : <User size={14} color={T.muted} />}
+            </div>
+            <div style={{
+              maxWidth: '80%',
+              padding: '10px 14px',
+              borderRadius: m.role === 'ai' ? '4px 14px 14px 14px' : '14px 4px 14px 14px',
+              background: m.role === 'ai' ? T.card : `linear-gradient(135deg, ${T.accent}cc, ${T.accent2}cc)`,
+              border: `1px solid ${m.role === 'ai' ? T.border : 'transparent'}`,
+              fontSize: '0.85rem', color: T.text, lineHeight: 1.65,
+              whiteSpace: 'pre-wrap',
+            }}>
+              {m.text.replace(/\*\*/g, '')}
+            </div>
+          </div>
+        ))}
+        {loading && (
+          <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+            <div style={{ width: 28, height: 28, borderRadius: 8, background: `linear-gradient(135deg, ${T.accent}, ${T.accent2})`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <Bot size={14} color="#fff" />
+            </div>
+            <div style={{ padding: '10px 14px', borderRadius: '4px 14px 14px 14px', background: T.card, border: `1px solid ${T.border}` }}>
+              <Loader2 size={14} color={T.accent} style={{ animation: 'spin 1s linear infinite' }} />
+            </div>
+          </div>
+        )}
+        <div ref={bottomRef} />
+      </div>
+
+      {/* Suggestions */}
+      {messages.length <= 2 && (
+        <div style={{ padding: '0 1rem 0.5rem', display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+          {suggestions.map(s => (
+            <button key={s} onClick={() => { setInput(s); }}
+              style={{
+                padding: '5px 10px', borderRadius: 20, fontSize: '0.72rem',
+                background: `${T.accent}18`, border: `1px solid ${T.accent}33`,
+                color: T.accent, cursor: 'pointer', fontWeight: 500,
+              }}>{s}</button>
+          ))}
+        </div>
+      )}
+
+      {/* Input */}
+      <div style={{ padding: '0.75rem 1rem 1rem', borderTop: `1px solid ${T.border}` }}>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          <input
+            value={input}
+            onChange={e => setInput(e.target.value)}
+            onKeyDown={e => e.key === 'Enter' && send()}
+            placeholder="Ask about your data..."
+            style={{
+              flex: 1, padding: '10px 14px',
+              background: T.card, border: `1px solid ${T.border}`,
+              borderRadius: 10, color: T.text, fontSize: '0.875rem',
+              outline: 'none',
+            }}
+          />
+          <button onClick={send} disabled={loading || !input.trim()}
+            style={{
+              width: 38, height: 38, borderRadius: 10,
+              background: `linear-gradient(135deg, ${T.accent}, ${T.accent2})`,
+              border: 'none', cursor: loading || !input.trim() ? 'not-allowed' : 'pointer',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              opacity: loading || !input.trim() ? 0.5 : 1,
+            }}>
+            <Send size={15} color="#fff" />
           </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ─── Bullet Insights Box ─────────────────────────────── */
+function InsightsBox({ insights }: { insights: string[] }) {
+  if (!insights.length) return null;
+  return (
+    <Card style={{ background: `linear-gradient(135deg, #0f1f3d, #1a1040)`, border: `1px solid ${T.accent}33` }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: '1rem' }}>
+        <div style={{ padding: 6, borderRadius: 8, background: `${T.accent}22` }}>
+          <Lightbulb size={15} color={T.accent} />
+        </div>
+        <p style={{ margin: 0, fontSize: '0.85rem', fontWeight: 700, color: T.accent, textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+          Key Insights
+        </p>
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        {insights.map((insight, i) => (
+          <div key={i} style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
+            <div style={{
+              width: 20, height: 20, borderRadius: 6, background: `${CHART_COLORS[i % CHART_COLORS.length]}22`,
+              border: `1px solid ${CHART_COLORS[i % CHART_COLORS.length]}44`,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              fontSize: '0.65rem', fontWeight: 800, color: CHART_COLORS[i % CHART_COLORS.length],
+              flexShrink: 0, marginTop: 1
+            }}>{String(i + 1).padStart(2, '0')}</div>
+            <p style={{ margin: 0, fontSize: '0.85rem', color: 'rgba(241,245,249,0.85)', lineHeight: 1.6 }}>{insight}</p>
+          </div>
+        ))}
+      </div>
+    </Card>
+  );
+}
+
+/* ─── Form Analysis View ──────────────────────────────── */
+function FormAnalysis({ formData, formId }: { formData: any; formId: string }) {
+  const [aiInsights, setAiInsights] = useState<string[]>([]);
+  const [aiLoading, setAiLoading] = useState(false);
+  const [chatOpen, setChatOpen] = useState(false);
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => { setMounted(true); }, []);
+
+  const generateInsights = async () => {
+    setAiLoading(true);
+    try {
+      const res = await fetch('/api/ai/analyze', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type: 'form_report', context: formData })
+      });
+      const d = await res.json();
+      if (d.analysis) {
+        // Extract bullet points
+        const lines = d.analysis.split('\n')
+          .filter((l: string) => l.trim().match(/^[-•*]|^\d+\.|^##/))
+          .map((l: string) => l.replace(/^[-•*#\d.]+\s*/, '').replace(/\*\*/g, '').trim())
+          .filter((l: string) => l.length > 10)
+          .slice(0, 6);
+        setAiInsights(lines.length > 0 ? lines : [d.analysis.split('\n')[0]]);
+      }
+    } catch {}
+    setAiLoading(false);
+  };
+
+  if (!formData) return null;
+
+  const { formTitle, totalSubmissions, questions = [] } = formData;
+  const answeredFields = questions.filter((q: any) => q.totalAnswers > 0).length;
+  const completionRate = questions.length > 0 ? Math.round((answeredFields / questions.length) * 100) : 0;
+  const topQuestion = [...questions].sort((a: any, b: any) => b.totalAnswers - a.totalAnswers)[0];
+
+  // Build radar data from top categorical questions
+  const catQuestions = questions.filter((q: any) => q.chartData?.length > 0).slice(0, 6);
+  const radarData = catQuestions.map((q: any) => ({
+    subject: q.label.substring(0, 18) + (q.label.length > 18 ? '…' : ''),
+    value: q.totalAnswers,
+    fullMark: totalSubmissions,
+  }));
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+
+      {/* Header bar */}
+      <div style={{
+        display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+        flexWrap: 'wrap', gap: '1rem'
+      }}>
+        <div>
+          <h2 style={{ margin: 0, fontSize: '1.3rem', fontWeight: 800, color: T.text }}>{formTitle}</h2>
+          <p style={{ margin: '4px 0 0', fontSize: '0.82rem', color: T.muted }}>Form Analysis Dashboard</p>
+        </div>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button onClick={generateInsights} disabled={aiLoading}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 7, padding: '9px 18px',
+              background: aiLoading ? T.card : `linear-gradient(135deg, ${T.accent}, ${T.accent2})`,
+              border: `1px solid ${aiLoading ? T.border : 'transparent'}`,
+              borderRadius: 10, color: '#fff', cursor: aiLoading ? 'not-allowed' : 'pointer',
+              fontSize: '0.82rem', fontWeight: 700,
+            }}>
+            {aiLoading ? <Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} /> : <Zap size={14} />}
+            {aiLoading ? 'Analyzing…' : aiInsights.length ? 'Refresh Insights' : 'Generate Insights'}
+          </button>
+          <button onClick={() => setChatOpen(true)}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 7, padding: '9px 18px',
+              background: `${T.cyan}18`, border: `1px solid ${T.cyan}44`,
+              borderRadius: 10, color: T.cyan, cursor: 'pointer',
+              fontSize: '0.82rem', fontWeight: 700,
+            }}>
+            <MessageSquare size={14} /> AI Insights
+          </button>
+        </div>
+      </div>
+
+      {/* KPI Row */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: '1rem' }}>
+        <KPICard label="Total Responses" value={totalSubmissions} icon={Activity} color={T.accent} />
+        <KPICard label="Questions" value={questions.length} icon={ClipboardList} color={T.accent2} />
+        <KPICard label="Completion Rate" value={`${completionRate}%`} icon={Target} color={T.green}
+          delta={completionRate >= 70 ? 12 : -8} />
+        <KPICard label="Most Active Field" value={topQuestion?.totalAnswers || 0} icon={BarChart2} color={T.amber} />
+      </div>
+
+      {/* Insights box */}
+      {aiInsights.length > 0 && <InsightsBox insights={aiInsights} />}
+
+      {/* Charts grid */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))', gap: '1.25rem' }}>
+
+        {/* Response Distribution - Radar */}
+        {radarData.length >= 3 && mounted && (
+          <Card>
+            <p style={{ margin: '0 0 1rem', fontSize: '0.82rem', fontWeight: 700, color: T.muted, textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+              Field Response Distribution
+            </p>
+            <ResponsiveContainer width="100%" height={260}>
+              <RadarChart data={radarData}>
+                <PolarGrid stroke={T.border} />
+                <PolarAngleAxis dataKey="subject" tick={{ fill: T.muted, fontSize: 11 }} />
+                <Radar name="Responses" dataKey="value" stroke={T.accent} fill={T.accent} fillOpacity={0.25} strokeWidth={2} />
+                <Tooltip content={<CustomTooltip />} />
+              </RadarChart>
+            </ResponsiveContainer>
+          </Card>
+        )}
+
+        {/* Response over time (if submissions have dates) */}
+        {mounted && (
+          <Card>
+            <p style={{ margin: '0 0 1rem', fontSize: '0.82rem', fontWeight: 700, color: T.muted, textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+              Completion Rate by Field
+            </p>
+            <ResponsiveContainer width="100%" height={260}>
+              <BarChart
+                data={questions.slice(0, 10).map((q: any) => ({
+                  name: q.label.substring(0, 14) + (q.label.length > 14 ? '…' : ''),
+                  responses: q.totalAnswers,
+                  rate: totalSubmissions > 0 ? Math.round((q.totalAnswers / totalSubmissions) * 100) : 0,
+                }))}
+                layout="vertical"
+              >
+                <CartesianGrid strokeDasharray="3 3" stroke={T.border} horizontal={false} />
+                <XAxis type="number" stroke={T.dimmed} fontSize={11} />
+                <YAxis type="category" dataKey="name" stroke={T.dimmed} fontSize={10} width={110} />
+                <Tooltip content={<CustomTooltip />} />
+                <Bar dataKey="responses" fill={T.accent} radius={[0, 6, 6, 0]}>
+                  {questions.slice(0, 10).map((_: any, i: number) => (
+                    <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />
+                  ))}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          </Card>
+        )}
+      </div>
+
+      {/* Per-question charts */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(340px, 1fr))', gap: '1.25rem' }}>
+        {questions.filter((q: any) => q.chartData?.length > 0).map((q: any, qi: number) => (
+          <Card key={q.fieldId}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1rem' }}>
+              <div>
+                <p style={{ margin: 0, fontSize: '0.68rem', color: T.dimmed, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+                  Q{qi + 1} · {q.type}
+                </p>
+                <p style={{ margin: '4px 0 0', fontSize: '0.92rem', fontWeight: 700, color: T.text, lineHeight: 1.3 }}>{q.label}</p>
+              </div>
+              <div style={{ textAlign: 'right' }}>
+                <p style={{ margin: 0, fontSize: '1.5rem', fontWeight: 800, color: CHART_COLORS[qi % CHART_COLORS.length] }}>{q.totalAnswers}</p>
+                <p style={{ margin: 0, fontSize: '0.65rem', color: T.dimmed }}>responses</p>
+              </div>
+            </div>
+            {mounted && (
+              <div style={{ display: 'grid', gridTemplateColumns: q.chartData.length <= 5 ? '1fr 1fr' : '1fr', gap: '0.75rem' }}>
+                <ResponsiveContainer width="100%" height={180}>
+                  <BarChart data={q.chartData.slice(0, 8)}>
+                    <CartesianGrid strokeDasharray="3 3" stroke={T.border} vertical={false} />
+                    <XAxis dataKey="name" stroke={T.dimmed} fontSize={10} />
+                    <YAxis stroke={T.dimmed} fontSize={10} allowDecimals={false} />
+                    <Tooltip content={<CustomTooltip />} />
+                    <Bar dataKey="value" radius={[5, 5, 0, 0]}>
+                      {q.chartData.slice(0, 8).map((_: any, i: number) => (
+                        <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />
+                      ))}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+                {q.chartData.length <= 5 && (
+                  <ResponsiveContainer width="100%" height={180}>
+                    <PieChart>
+                      <Pie data={q.chartData.slice(0, 5)} dataKey="value" nameKey="name" innerRadius={40} outerRadius={65} paddingAngle={3}>
+                        {q.chartData.slice(0, 5).map((_: any, i: number) => (
+                          <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />
+                        ))}
+                      </Pie>
+                      <Tooltip content={<CustomTooltip />} />
+                      <Legend formatter={(v: any) => <span style={{ color: T.muted, fontSize: '0.72rem' }}>{v}</span>} />
+                    </PieChart>
+                  </ResponsiveContainer>
+                )}
+              </div>
+            )}
+          </Card>
         ))}
       </div>
 
-      {tab==='forms'    && renderForms()}
-      {tab==='datasets' && renderDatasets()}
-      {tab==='overview' && renderOverview()}
+      {/* AI Chat panel */}
+      <AIChatPanel
+        isOpen={chatOpen}
+        onClose={() => setChatOpen(false)}
+        contextData={formData}
+        dataType="form"
+        dataId={formId}
+      />
+    </div>
+  );
+}
+
+/* ─── Upload Analysis View ────────────────────────────── */
+function UploadAnalysis({ dsData, dsId }: { dsData: any; dsId: string }) {
+  const [aiInsights, setAiInsights] = useState<string[]>([]);
+  const [aiLoading, setAiLoading] = useState(false);
+  const [chatOpen, setChatOpen] = useState(false);
+  const [expandedCol, setExpandedCol] = useState<string | null>(null);
+  const [mounted, setMounted] = useState(false);
+  const [corrA, setCorrA] = useState('');
+  const [corrB, setCorrB] = useState('');
+
+  useEffect(() => { setMounted(true); }, []);
+
+  const generateInsights = async () => {
+    setAiLoading(true);
+    try {
+      const res = await fetch('/api/ai/analyze', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type: 'dataset', context: dsData })
+      });
+      const d = await res.json();
+      if (d.analysis) {
+        const lines = d.analysis.split('\n')
+          .filter((l: string) => l.trim().match(/^[-•*]|^\d+\.|^##/))
+          .map((l: string) => l.replace(/^[-•*#\d.]+\s*/, '').replace(/\*\*/g, '').trim())
+          .filter((l: string) => l.length > 10)
+          .slice(0, 6);
+        setAiInsights(lines.length > 0 ? lines : [d.analysis.split('\n')[0]]);
+      }
+    } catch {}
+    setAiLoading(false);
+  };
+
+  if (!dsData) return null;
+
+  const { filename, rowCount, columnCount, columns = [] } = dsData;
+  const numCols = columns.filter((c: any) => c.type === 'numeric');
+  const catCols = columns.filter((c: any) => c.type === 'categorical');
+  const phoneCols = columns.filter((c: any) => c.type === 'phone');
+  const emailCols = columns.filter((c: any) => c.type === 'email');
+  const tsCols = columns.filter((c: any) => c.type === 'timestamp');
+  const nullHeavy = columns.filter((c: any) => (c.missing / rowCount) > 0.2).length;
+  const dataQuality = Math.round((1 - nullHeavy / Math.max(columnCount, 1)) * 100);
+
+  // Numeric summary for area chart
+  const numericSummary = numCols.slice(0, 6).map((c: any) => ({
+    name: c.name.substring(0, 12),
+    min: c.min, max: c.max, mean: c.mean
+  }));
+
+  // Column type breakdown for pie
+  const typePie = [
+    { name: 'Numeric', value: numCols.length },
+    { name: 'Categorical', value: catCols.length },
+    { name: 'Phone', value: phoneCols.length },
+    { name: 'Email', value: emailCols.length },
+    { name: 'Date', value: tsCols.length },
+  ].filter(t => t.value > 0);
+
+  const getBadge = (type: string) => {
+    const map: any = {
+      numeric: { bg: '#10b98122', color: T.green, label: '123' },
+      categorical: { bg: '#f59e0b22', color: T.amber, label: 'ABC' },
+      timestamp: { bg: '#6366f122', color: '#a5b4fc', label: '📅' },
+      phone: { bg: '#f59e0b22', color: T.amber, label: '📞' },
+      email: { bg: '#06b6d422', color: T.cyan, label: '✉️' },
+    };
+    return map[type] || map.categorical;
+  };
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+
+      {/* Header */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem' }}>
+        <div>
+          <h2 style={{ margin: 0, fontSize: '1.3rem', fontWeight: 800, color: T.text }}>{filename}</h2>
+          <p style={{ margin: '4px 0 0', fontSize: '0.82rem', color: T.muted }}>Dataset Analysis Dashboard</p>
+        </div>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button onClick={generateInsights} disabled={aiLoading}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 7, padding: '9px 18px',
+              background: aiLoading ? T.card : `linear-gradient(135deg, ${T.accent}, ${T.accent2})`,
+              border: `1px solid ${aiLoading ? T.border : 'transparent'}`,
+              borderRadius: 10, color: '#fff', cursor: aiLoading ? 'not-allowed' : 'pointer',
+              fontSize: '0.82rem', fontWeight: 700,
+            }}>
+            {aiLoading ? <Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} /> : <Zap size={14} />}
+            {aiLoading ? 'Analyzing…' : aiInsights.length ? 'Refresh Insights' : 'Generate Insights'}
+          </button>
+          <button onClick={() => setChatOpen(true)}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 7, padding: '9px 18px',
+              background: `${T.cyan}18`, border: `1px solid ${T.cyan}44`,
+              borderRadius: 10, color: T.cyan, cursor: 'pointer',
+              fontSize: '0.82rem', fontWeight: 700,
+            }}>
+            <MessageSquare size={14} /> AI Insights
+          </button>
+        </div>
+      </div>
+
+      {/* KPI Row */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: '1rem' }}>
+        <KPICard label="Total Rows" value={rowCount?.toLocaleString()} icon={Database} color={T.accent} />
+        <KPICard label="Columns" value={columnCount} icon={Filter} color={T.accent2} />
+        <KPICard label="Data Quality" value={`${dataQuality}%`} icon={CheckCircle} color={dataQuality >= 80 ? T.green : T.amber}
+          delta={dataQuality >= 80 ? 5 : -10} />
+        <KPICard label="Numeric Cols" value={numCols.length} icon={Activity} color={T.cyan} />
+      </div>
+
+      {/* Insights */}
+      {aiInsights.length > 0 && <InsightsBox insights={aiInsights} />}
+
+      {/* Overview charts */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(340px, 1fr))', gap: '1.25rem' }}>
+
+        {/* Column type breakdown */}
+        {mounted && typePie.length > 0 && (
+          <Card>
+            <p style={{ margin: '0 0 1rem', fontSize: '0.82rem', fontWeight: 700, color: T.muted, textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+              Column Type Breakdown
+            </p>
+            <ResponsiveContainer width="100%" height={240}>
+              <PieChart>
+                <Pie data={typePie} dataKey="value" nameKey="name" innerRadius={55} outerRadius={85} paddingAngle={4}>
+                  {typePie.map((_: any, i: number) => <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />)}
+                </Pie>
+                <Tooltip content={<CustomTooltip />} />
+                <Legend formatter={(v: any) => <span style={{ color: T.muted, fontSize: '0.75rem' }}>{v}</span>} />
+              </PieChart>
+            </ResponsiveContainer>
+          </Card>
+        )}
+
+        {/* Numeric range overview */}
+        {mounted && numericSummary.length > 0 && (
+          <Card>
+            <p style={{ margin: '0 0 1rem', fontSize: '0.82rem', fontWeight: 700, color: T.muted, textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+              Numeric Column Ranges
+            </p>
+            <ResponsiveContainer width="100%" height={240}>
+              <BarChart data={numericSummary}>
+                <CartesianGrid strokeDasharray="3 3" stroke={T.border} vertical={false} />
+                <XAxis dataKey="name" stroke={T.dimmed} fontSize={10} />
+                <YAxis stroke={T.dimmed} fontSize={10} />
+                <Tooltip content={<CustomTooltip />} />
+                <Bar dataKey="min" fill={T.accent2} radius={[4, 4, 0, 0]} name="Min" />
+                <Bar dataKey="mean" fill={T.accent} radius={[4, 4, 0, 0]} name="Mean" />
+                <Bar dataKey="max" fill={T.cyan} radius={[4, 4, 0, 0]} name="Max" />
+                <Legend formatter={(v: any) => <span style={{ color: T.muted, fontSize: '0.75rem' }}>{v}</span>} />
+              </BarChart>
+            </ResponsiveContainer>
+          </Card>
+        )}
+      </div>
+
+      {/* Column Cards */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+        <p style={{ margin: 0, fontSize: '0.82rem', fontWeight: 700, color: T.muted, textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+          Column Details
+        </p>
+        {columns.map((col: any, idx: number) => {
+          const isExp = expandedCol === col.name;
+          const badge = getBadge(col.type);
+          return (
+            <Card key={col.name} style={{ padding: '1rem 1.25rem' }}>
+              <button onClick={() => setExpandedCol(isExp ? null : col.name)}
+                style={{ width: '100%', background: 'none', border: 'none', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: 0 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                  <span style={{ fontSize: '0.65rem', padding: '3px 9px', borderRadius: 8, fontWeight: 700, background: badge.bg, color: badge.color }}>
+                    {badge.label}
+                  </span>
+                  <span style={{ color: T.text, fontWeight: 700, fontSize: '0.95rem' }}>{col.name}</span>
+                  <Chip label={col.type} color={badge.color} />
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                  <span style={{ fontSize: '0.78rem', color: T.muted }}>
+                    {col.type === 'numeric'
+                      ? `avg: ${col.mean} · range: ${col.min}–${col.max}`
+                      : col.type === 'phone' ? `${col.validPhones} valid`
+                      : col.type === 'email' ? `${col.validEmails} valid`
+                      : `${col.uniqueCount} unique`}
+                  </span>
+                  {isExp ? <ChevronUp size={15} color={T.dimmed} /> : <ChevronDown size={15} color={T.dimmed} />}
+                </div>
+              </button>
+
+              {isExp && mounted && (
+                <div style={{ marginTop: '1.25rem', borderTop: `1px solid ${T.border}`, paddingTop: '1.25rem' }}>
+
+                  {/* NUMERIC */}
+                  {col.type === 'numeric' && (<>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(100px, 1fr))', gap: '0.75rem', marginBottom: '1rem' }}>
+                      {[['Min', col.min, T.accent2], ['Max', col.max, T.pink], ['Mean', col.mean, T.green], ['Median', col.median, T.amber], ['Std Dev', col.std, '#a5b4fc']].map(([l, v, c]: any) => (
+                        <div key={l} style={{ background: `${c}11`, borderRadius: 10, padding: '0.75rem', border: `1px solid ${c}22` }}>
+                          <p style={{ margin: 0, fontSize: '0.65rem', color: T.muted }}>{l}</p>
+                          <p style={{ margin: '4px 0 0', fontSize: '1.1rem', fontWeight: 800, color: c }}>{v}</p>
+                        </div>
+                      ))}
+                    </div>
+                    <ResponsiveContainer width="100%" height={180}>
+                      <AreaChart data={col.histogram}>
+                        <defs>
+                          <linearGradient id={`grad${idx}`} x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="5%" stopColor={CHART_COLORS[idx % CHART_COLORS.length]} stopOpacity={0.4} />
+                            <stop offset="95%" stopColor={CHART_COLORS[idx % CHART_COLORS.length]} stopOpacity={0} />
+                          </linearGradient>
+                        </defs>
+                        <CartesianGrid strokeDasharray="3 3" stroke={T.border} vertical={false} />
+                        <XAxis dataKey="range" stroke={T.dimmed} fontSize={8} angle={-25} textAnchor="end" height={45} />
+                        <YAxis stroke={T.dimmed} fontSize={10} />
+                        <Tooltip content={<CustomTooltip />} />
+                        <Area type="monotone" dataKey="count" stroke={CHART_COLORS[idx % CHART_COLORS.length]} fill={`url(#grad${idx})`} strokeWidth={2} />
+                      </AreaChart>
+                    </ResponsiveContainer>
+                  </>)}
+
+                  {/* TIMESTAMP */}
+                  {col.type === 'timestamp' && (<>
+                    <div style={{ padding: '10px 14px', background: '#6366f111', border: '1px solid #6366f133', borderRadius: 8, marginBottom: '1rem', fontSize: '0.82rem', color: '#a5b4fc' }}>
+                      📅 {col.note}
+                    </div>
+                    <ResponsiveContainer width="100%" height={200}>
+                      <BarChart data={col.topValues} layout="vertical">
+                        <XAxis type="number" stroke={T.dimmed} fontSize={10} />
+                        <YAxis type="category" dataKey="name" stroke={T.dimmed} fontSize={10} width={130} />
+                        <Tooltip content={<CustomTooltip />} />
+                        <Bar dataKey="value" radius={[0, 5, 5, 0]}>
+                          {col.topValues?.map((_: any, i: number) => <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />)}
+                        </Bar>
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </>)}
+
+                  {/* PHONE */}
+                  {col.type === 'phone' && (
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '0.75rem' }}>
+                      {[['Total', col.count, T.accent], ['Valid', col.validPhones, T.green], ['Invalid', col.invalidPhones, T.red], ['Unique', col.uniqueCount, T.amber]].map(([l, v, c]: any) => (
+                        <div key={l} style={{ background: `${c}11`, borderRadius: 10, padding: '0.75rem', border: `1px solid ${c}22` }}>
+                          <p style={{ margin: 0, fontSize: '0.65rem', color: T.muted }}>{l}</p>
+                          <p style={{ margin: '4px 0 0', fontSize: '1.2rem', fontWeight: 800, color: c }}>{v}</p>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* EMAIL */}
+                  {col.type === 'email' && (
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem' }}>
+                        {[['Total', col.count, T.accent], ['Valid', col.validEmails, T.green], ['Invalid', col.invalidEmails, T.red], ['Unique', col.uniqueCount, T.amber]].map(([l, v, c]: any) => (
+                          <div key={l} style={{ background: `${c}11`, borderRadius: 10, padding: '0.6rem', border: `1px solid ${c}22` }}>
+                            <p style={{ margin: 0, fontSize: '0.62rem', color: T.muted }}>{l}</p>
+                            <p style={{ margin: '2px 0 0', fontSize: '1rem', fontWeight: 800, color: c }}>{v}</p>
+                          </div>
+                        ))}
+                      </div>
+                      {col.topDomains?.length > 0 && (
+                        <ResponsiveContainer width="100%" height={160}>
+                          <BarChart data={col.topDomains} layout="vertical">
+                            <XAxis type="number" stroke={T.dimmed} fontSize={10} />
+                            <YAxis type="category" dataKey="name" stroke={T.dimmed} fontSize={9} width={140} />
+                            <Tooltip content={<CustomTooltip />} />
+                            <Bar dataKey="value" radius={[0, 5, 5, 0]}>
+                              {col.topDomains?.map((_: any, i: number) => <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />)}
+                            </Bar>
+                          </BarChart>
+                        </ResponsiveContainer>
+                      )}
+                    </div>
+                  )}
+
+                  {/* CATEGORICAL */}
+                  {col.type === 'categorical' && (
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                      <ResponsiveContainer width="100%" height={Math.max(200, (col.topValues?.length || 8) * 26)}>
+                        <BarChart data={col.topValues} layout="vertical">
+                          <CartesianGrid strokeDasharray="3 3" stroke={T.border} horizontal={false} />
+                          <XAxis type="number" stroke={T.dimmed} fontSize={10} />
+                          <YAxis type="category" dataKey="name" stroke={T.dimmed} fontSize={10} width={150} />
+                          <Tooltip content={<CustomTooltip />} />
+                          <Bar dataKey="value" radius={[0, 5, 5, 0]}>
+                            {col.topValues?.map((_: any, i: number) => <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />)}
+                          </Bar>
+                        </BarChart>
+                      </ResponsiveContainer>
+                      <ResponsiveContainer width="100%" height={220}>
+                        <PieChart>
+                          <Pie data={col.topValues?.slice(0, 8)} dataKey="value" nameKey="name" innerRadius={45} outerRadius={75} paddingAngle={3}>
+                            {col.topValues?.slice(0, 8).map((_: any, i: number) => <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />)}
+                          </Pie>
+                          <Tooltip content={<CustomTooltip />} />
+                          <Legend formatter={(v: any) => <span style={{ color: T.muted, fontSize: '0.7rem' }}>{v}</span>} />
+                        </PieChart>
+                      </ResponsiveContainer>
+                    </div>
+                  )}
+                </div>
+              )}
+            </Card>
+          );
+        })}
+      </div>
+
+      <AIChatPanel
+        isOpen={chatOpen}
+        onClose={() => setChatOpen(false)}
+        contextData={dsData}
+        dataType="dataset"
+        dataId={dsId}
+      />
+    </div>
+  );
+}
+
+/* ─── Form Report View ────────────────────────────────── */
+function FormReport({ formData, formId }: { formData: any; formId: string }) {
+  const [report, setReport] = useState<any>(null);
+  const [aiAnalysis, setAiAnalysis] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [aiLoading, setAiLoading] = useState(false);
+  const [chatOpen, setChatOpen] = useState(false);
+  const reportRef = useRef<HTMLDivElement>(null);
+
+  const generateReport = async () => {
+    setLoading(true);
+    try {
+      const res = await fetch(`/api/reports/generate-v2?type=form&formId=${formId}`);
+      setReport(await res.json());
+    } catch {}
+    setLoading(false);
+  };
+
+  const generateAI = async () => {
+    if (!formData) return;
+    setAiLoading(true);
+    try {
+      const res = await fetch('/api/ai/analyze', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type: 'form_report', context: formData })
+      });
+      const d = await res.json();
+      setAiAnalysis(d.analysis || '');
+    } catch {}
+    setAiLoading(false);
+  };
+
+  const exportPDF = async () => {
+    if (!reportRef.current) return;
+    const html2canvas = (await import('html2canvas')).default;
+    const jsPDF = (await import('jspdf')).default;
+    const canvas = await html2canvas(reportRef.current, { scale: 2, backgroundColor: '#0a0e1a', useCORS: true });
+    const img = canvas.toDataURL('image/png');
+    const pdf = new jsPDF('p', 'mm', 'a4');
+    const w = pdf.internal.pageSize.getWidth();
+    const h = pdf.internal.pageSize.getHeight();
+    const imgH = (canvas.height * w) / canvas.width;
+    let pos = 0;
+    while (pos < imgH) { pdf.addImage(img, 'PNG', 0, -pos, w, imgH); pos += h; if (pos < imgH) pdf.addPage(); }
+    pdf.save(`${formData?.formTitle || 'form'}_report.pdf`);
+  };
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+        <button onClick={generateReport} disabled={loading}
+          style={{
+            display: 'flex', alignItems: 'center', gap: 7, padding: '9px 20px',
+            background: `linear-gradient(135deg, ${T.accent}, ${T.accent2})`,
+            border: 'none', borderRadius: 10, color: '#fff', cursor: loading ? 'not-allowed' : 'pointer',
+            fontSize: '0.82rem', fontWeight: 700, opacity: loading ? 0.6 : 1
+          }}>
+          {loading ? <Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} /> : <FileText size={14} />}
+          Generate Report
+        </button>
+        {report && (<>
+          <button onClick={generateAI} disabled={aiLoading}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 7, padding: '9px 20px',
+              background: `${T.accent}18`, border: `1px solid ${T.accent}44`,
+              borderRadius: 10, color: T.accent, cursor: aiLoading ? 'not-allowed' : 'pointer',
+              fontSize: '0.82rem', fontWeight: 700
+            }}>
+            {aiLoading ? <Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} /> : <Sparkles size={14} />}
+            AI Analysis
+          </button>
+          <button onClick={exportPDF}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 7, padding: '9px 20px',
+              background: `${T.green}18`, border: `1px solid ${T.green}44`,
+              borderRadius: 10, color: T.green, cursor: 'pointer', fontSize: '0.82rem', fontWeight: 700
+            }}>
+            Export PDF
+          </button>
+          <button onClick={() => setChatOpen(true)}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 7, padding: '9px 20px',
+              background: `${T.cyan}18`, border: `1px solid ${T.cyan}44`,
+              borderRadius: 10, color: T.cyan, cursor: 'pointer', fontSize: '0.82rem', fontWeight: 700
+            }}>
+            <MessageSquare size={14} /> AI Copilot
+          </button>
+        </>)}
+      </div>
+
+      {loading && (
+        <Card style={{ textAlign: 'center', padding: '3rem' }}>
+          <Loader2 size={36} color={T.accent} style={{ animation: 'spin 1s linear infinite', marginBottom: 12 }} />
+          <p style={{ color: T.muted, margin: 0 }}>Generating professional report…</p>
+        </Card>
+      )}
+
+      {report && !loading && (
+        <div ref={reportRef} style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+          {/* Title */}
+          <Card style={{ background: `linear-gradient(135deg, #0f1f3d, #1a0f3d)`, border: `1px solid ${T.accent}33` }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: '1rem' }}>
+              <div>
+                <p style={{ margin: '0 0 6px', fontSize: '0.7rem', color: T.accent, textTransform: 'uppercase', letterSpacing: '0.12em', fontWeight: 700 }}>DataCore Intelligence</p>
+                <h2 style={{ margin: 0, fontSize: '1.5rem', fontWeight: 800, color: T.text }}>{report.title}</h2>
+                <p style={{ margin: '8px 0 0', fontSize: '0.8rem', color: T.muted }}>
+                  📅 {new Date().toLocaleDateString('en-IN', { dateStyle: 'long' })} · {report.filters || 'All time'}
+                </p>
+              </div>
+              <div style={{ padding: '12px 20px', background: `${T.accent}18`, border: `1px solid ${T.accent}33`, borderRadius: 12, textAlign: 'center' }}>
+                <p style={{ margin: 0, fontSize: '0.68rem', color: T.accent, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Report Type</p>
+                <p style={{ margin: '4px 0 0', fontSize: '1rem', fontWeight: 800, color: T.text }}>Form Report</p>
+              </div>
+            </div>
+          </Card>
+
+          {/* Metrics */}
+          {report.metrics?.length > 0 && (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '1rem' }}>
+              {report.metrics.map((m: any, i: number) => (
+                <KPICard key={i} label={m.label} value={m.value} color={CHART_COLORS[i % CHART_COLORS.length]} icon={Activity} />
+              ))}
+            </div>
+          )}
+
+          {/* AI Analysis */}
+          {aiAnalysis && (
+            <Card style={{ background: `linear-gradient(135deg, #0f1f2d, #111827)`, border: `1px solid ${T.cyan}33` }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: '1rem' }}>
+                <Sparkles size={15} color={T.cyan} />
+                <p style={{ margin: 0, fontSize: '0.82rem', fontWeight: 700, color: T.cyan, textTransform: 'uppercase', letterSpacing: '0.08em' }}>AI Analysis</p>
+              </div>
+              <div style={{ color: 'rgba(241,245,249,0.85)', lineHeight: 1.8, whiteSpace: 'pre-wrap', fontSize: '0.875rem' }}>
+                {aiAnalysis.replace(/\*\*/g, '')}
+              </div>
+            </Card>
+          )}
+
+          {/* Data Table */}
+          {report.details?.length > 0 && (
+            <Card>
+              <p style={{ margin: '0 0 1rem', fontSize: '0.82rem', fontWeight: 700, color: T.muted, textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+                Field Details
+              </p>
+              <div style={{ overflowX: 'auto' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
+                  <thead>
+                    <tr>
+                      {Object.keys(report.details[0]).map(k => (
+                        <th key={k} style={{ padding: '10px 14px', textAlign: 'left', color: T.dimmed, borderBottom: `1px solid ${T.border}`, fontSize: '0.72rem', textTransform: 'uppercase', letterSpacing: '0.06em', background: T.surface }}>
+                          {k}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {report.details.map((row: any, i: number) => (
+                      <tr key={i} style={{ borderBottom: `1px solid ${T.border}` }}>
+                        {Object.values(row).map((v: any, j) => (
+                          <td key={j} style={{ padding: '10px 14px', color: j === 0 ? T.text : T.muted, fontWeight: j === 0 ? 600 : 400 }}>
+                            {String(v)}
+                          </td>
+                        ))}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </Card>
+          )}
+        </div>
+      )}
+
+      <AIChatPanel isOpen={chatOpen} onClose={() => setChatOpen(false)} contextData={formData} dataType="form" dataId={formId} />
+    </div>
+  );
+}
+
+/* ─── MAIN PAGE ───────────────────────────────────────── */
+type MainView = 'form' | 'upload';
+type FormSub = 'analysis' | 'report';
+
+export default function AnalyticsPage() {
+  const [view, setView] = useState<MainView | null>(null);
+  const [formSub, setFormSub] = useState<FormSub>('analysis');
+  const [forms, setForms] = useState<any[]>([]);
+  const [datasets, setDatasets] = useState<any[]>([]);
+  const [selectedForm, setSelectedForm] = useState('');
+  const [selectedDataset, setSelectedDataset] = useState('');
+  const [formData, setFormData] = useState<any>(null);
+  const [dsData, setDsData] = useState<any>(null);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    fetch('/api/forms').then(r => r.json()).then(d => {
+      const arr = Array.isArray(d) ? d : (d.forms || []);
+      setForms(arr);
+      if (arr.length) setSelectedForm(arr[0].id);
+    }).catch(() => {});
+    fetch('/api/datasets').then(r => r.json()).then(d => {
+      const arr = Array.isArray(d) ? d : [];
+      setDatasets(arr);
+      if (arr.length) setSelectedDataset(arr[0].id);
+    }).catch(() => {});
+  }, []);
+
+  const loadForm = async (id: string) => {
+    if (!id) return;
+    setLoading(true); setFormData(null);
+    try {
+      const r = await fetch(`/api/analytics/questions?formId=${id}`);
+      setFormData(await r.json());
+    } catch {}
+    setLoading(false);
+  };
+
+  const loadDataset = async (id: string) => {
+    if (!id) return;
+    setLoading(true); setDsData(null);
+    try {
+      const r = await fetch(`/api/datasets/${id}/analytics`);
+      setDsData(await r.json());
+    } catch {}
+    setLoading(false);
+  };
+
+  /* ── Landing selector ── */
+  if (!view) {
+    return (
+      <div style={{ padding: '2rem', maxWidth: 900, margin: '0 auto' }}>
+        <div style={{ marginBottom: '2.5rem' }}>
+          <h1 style={{ fontSize: '1.8rem', fontWeight: 900, color: T.text, margin: 0 }}>Analytics</h1>
+          <p style={{ color: T.muted, margin: '6px 0 0' }}>Select a data source to begin analysis</p>
+        </div>
+
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '1.5rem' }}>
+          {/* Form card */}
+          <button onClick={() => setView('form')}
+            style={{
+              background: `linear-gradient(135deg, #0f1f3d 0%, #1a1040 100%)`,
+              border: `1px solid ${T.accent}33`,
+              borderRadius: 20, padding: '2rem',
+              cursor: 'pointer', textAlign: 'left',
+              transition: 'all 0.2s',
+            }}
+            onMouseEnter={e => { (e.currentTarget as any).style.border = `1px solid ${T.accent}88`; (e.currentTarget as any).style.transform = 'translateY(-3px)'; }}
+            onMouseLeave={e => { (e.currentTarget as any).style.border = `1px solid ${T.accent}33`; (e.currentTarget as any).style.transform = 'none'; }}
+          >
+            <div style={{ width: 52, height: 52, borderRadius: 14, background: `linear-gradient(135deg, ${T.accent}, ${T.accent2})`, display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '1.25rem' }}>
+              <ClipboardList size={24} color="#fff" />
+            </div>
+            <h3 style={{ margin: '0 0 8px', fontSize: '1.1rem', fontWeight: 800, color: T.text }}>Form</h3>
+            <p style={{ margin: '0 0 1.25rem', fontSize: '0.85rem', color: T.muted, lineHeight: 1.6 }}>
+              Analyze form responses with charts, trends and AI-powered insights
+            </p>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <Chip label="00 Analysis" color={T.accent} />
+              <Chip label="01 Report" color={T.accent2} />
+            </div>
+          </button>
+
+          {/* Upload card */}
+          <button onClick={() => setView('upload')}
+            style={{
+              background: `linear-gradient(135deg, #0f2d1f 0%, #1a2a10 100%)`,
+              border: `1px solid ${T.green}33`,
+              borderRadius: 20, padding: '2rem',
+              cursor: 'pointer', textAlign: 'left',
+              transition: 'all 0.2s',
+            }}
+            onMouseEnter={e => { (e.currentTarget as any).style.border = `1px solid ${T.green}88`; (e.currentTarget as any).style.transform = 'translateY(-3px)'; }}
+            onMouseLeave={e => { (e.currentTarget as any).style.border = `1px solid ${T.green}33`; (e.currentTarget as any).style.transform = 'none'; }}
+          >
+            <div style={{ width: 52, height: 52, borderRadius: 14, background: `linear-gradient(135deg, ${T.green}, ${T.cyan})`, display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '1.25rem' }}>
+              <Upload size={24} color="#fff" />
+            </div>
+            <h3 style={{ margin: '0 0 8px', fontSize: '1.1rem', fontWeight: 800, color: T.text }}>Upload File</h3>
+            <p style={{ margin: '0 0 1.25rem', fontSize: '0.85rem', color: T.muted, lineHeight: 1.6 }}>
+              Deep-dive into uploaded datasets with column stats, distributions and smart AI analysis
+            </p>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <Chip label="Dataset Analytics" color={T.green} />
+              <Chip label="AI Copilot" color={T.cyan} />
+            </div>
+          </button>
+        </div>
+        <style>{`@keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}`}</style>
+      </div>
+    );
+  }
+
+  /* ── Form view ── */
+  if (view === 'form') {
+    return (
+      <div style={{ padding: '1.5rem', maxWidth: 1300, margin: '0 auto' }}>
+        {/* Breadcrumb */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: '1.5rem', flexWrap: 'wrap' }}>
+          <button onClick={() => { setView(null); setFormData(null); }}
+            style={{ background: 'none', border: 'none', color: T.muted, cursor: 'pointer', fontSize: '0.875rem', padding: 0 }}>
+            Analytics
+          </button>
+          <ChevronRight size={14} color={T.dimmed} />
+          <span style={{ color: T.text, fontSize: '0.875rem', fontWeight: 600 }}>Form</span>
+          {formData && (<>
+            <ChevronRight size={14} color={T.dimmed} />
+            <span style={{ color: T.accent, fontSize: '0.875rem', fontWeight: 600 }}>{formData.formTitle}</span>
+          </>)}
+        </div>
+
+        {/* Sub-tabs */}
+        <div style={{ display: 'flex', gap: 6, marginBottom: '1.5rem' }}>
+          {[
+            { id: 'analysis', label: '00  Analysis', icon: BarChart2 },
+            { id: 'report',   label: '01  Report',   icon: FileText },
+          ].map(t => {
+            const Icon = t.icon;
+            const active = formSub === t.id;
+            return (
+              <button key={t.id} onClick={() => setFormSub(t.id as FormSub)}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 7, padding: '9px 20px',
+                  borderRadius: 10, border: `1px solid ${active ? T.accent : T.border}`,
+                  background: active ? `${T.accent}18` : 'none',
+                  color: active ? T.accent : T.muted,
+                  cursor: 'pointer', fontWeight: active ? 700 : 500, fontSize: '0.875rem',
+                  transition: 'all 0.15s',
+                }}>
+                <Icon size={15} /> {t.label}
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Form selector */}
+        <Card style={{ marginBottom: '1.5rem', display: 'flex', alignItems: 'center', gap: '1rem', flexWrap: 'wrap' }}>
+          <ClipboardList size={16} color={T.muted} />
+          <select value={selectedForm} onChange={e => { setSelectedForm(e.target.value); setFormData(null); }}
+            style={{ flex: 1, minWidth: 200, maxWidth: 400, padding: '10px 14px', background: T.surface, border: `1px solid ${T.border}`, borderRadius: 10, color: T.text, fontSize: '0.875rem' }}>
+            {forms.length === 0 ? <option>No forms yet</option>
+              : forms.map((f: any) => <option key={f.id} value={f.id}>{f.title}</option>)}
+          </select>
+          <button onClick={() => loadForm(selectedForm)} disabled={!selectedForm || loading}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 7, padding: '10px 22px',
+              background: `linear-gradient(135deg, ${T.accent}, ${T.accent2})`,
+              border: 'none', borderRadius: 10, color: '#fff', fontWeight: 700, fontSize: '0.875rem',
+              cursor: loading || !selectedForm ? 'not-allowed' : 'pointer', opacity: loading ? 0.6 : 1,
+            }}>
+            {loading ? <Loader2 size={15} style={{ animation: 'spin 1s linear infinite' }} /> : <RefreshCw size={15} />}
+            Load
+          </button>
+        </Card>
+
+        {loading && (
+          <Card style={{ textAlign: 'center', padding: '4rem' }}>
+            <Loader2 size={36} color={T.accent} style={{ animation: 'spin 1s linear infinite', marginBottom: 12 }} />
+            <p style={{ color: T.muted, margin: 0 }}>Loading analytics…</p>
+          </Card>
+        )}
+
+        {!loading && !formData && (
+          <Card style={{ textAlign: 'center', padding: '4rem' }}>
+            <ClipboardList size={44} color={T.dimmed} style={{ marginBottom: 12 }} />
+            <p style={{ color: T.muted, margin: 0 }}>Select a form and click Load</p>
+          </Card>
+        )}
+
+        {!loading && formData && formSub === 'analysis' && (
+          <FormAnalysis formData={formData} formId={selectedForm} />
+        )}
+        {!loading && formData && formSub === 'report' && (
+          <FormReport formData={formData} formId={selectedForm} />
+        )}
+
+        <style>{`@keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}`}</style>
+      </div>
+    );
+  }
+
+  /* ── Upload view ── */
+  return (
+    <div style={{ padding: '1.5rem', maxWidth: 1300, margin: '0 auto' }}>
+      {/* Breadcrumb */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: '1.5rem' }}>
+        <button onClick={() => { setView(null); setDsData(null); }}
+          style={{ background: 'none', border: 'none', color: T.muted, cursor: 'pointer', fontSize: '0.875rem', padding: 0 }}>
+          Analytics
+        </button>
+        <ChevronRight size={14} color={T.dimmed} />
+        <span style={{ color: T.text, fontSize: '0.875rem', fontWeight: 600 }}>Upload File</span>
+        {dsData && (<>
+          <ChevronRight size={14} color={T.dimmed} />
+          <span style={{ color: T.green, fontSize: '0.875rem', fontWeight: 600 }}>{dsData.filename}</span>
+        </>)}
+      </div>
+
+      {/* Dataset selector */}
+      <Card style={{ marginBottom: '1.5rem', display: 'flex', alignItems: 'center', gap: '1rem', flexWrap: 'wrap' }}>
+        <Database size={16} color={T.muted} />
+        <select value={selectedDataset} onChange={e => { setSelectedDataset(e.target.value); setDsData(null); }}
+          style={{ flex: 1, minWidth: 200, maxWidth: 400, padding: '10px 14px', background: T.surface, border: `1px solid ${T.border}`, borderRadius: 10, color: T.text, fontSize: '0.875rem' }}>
+          {datasets.length === 0 ? <option>No datasets uploaded</option>
+            : datasets.map((d: any) => <option key={d.id} value={d.id}>{d.filename}</option>)}
+        </select>
+        <button onClick={() => loadDataset(selectedDataset)} disabled={!selectedDataset || loading}
+          style={{
+            display: 'flex', alignItems: 'center', gap: 7, padding: '10px 22px',
+            background: `linear-gradient(135deg, ${T.green}, ${T.cyan})`,
+            border: 'none', borderRadius: 10, color: '#fff', fontWeight: 700, fontSize: '0.875rem',
+            cursor: loading || !selectedDataset ? 'not-allowed' : 'pointer', opacity: loading ? 0.6 : 1,
+          }}>
+          {loading ? <Loader2 size={15} style={{ animation: 'spin 1s linear infinite' }} /> : <RefreshCw size={15} />}
+          Load
+        </button>
+      </Card>
+
+      {loading && (
+        <Card style={{ textAlign: 'center', padding: '4rem' }}>
+          <Loader2 size={36} color={T.green} style={{ animation: 'spin 1s linear infinite', marginBottom: 12 }} />
+          <p style={{ color: T.muted, margin: 0 }}>Analyzing dataset…</p>
+        </Card>
+      )}
+
+      {!loading && !dsData && (
+        <Card style={{ textAlign: 'center', padding: '4rem' }}>
+          <Upload size={44} color={T.dimmed} style={{ marginBottom: 12 }} />
+          <p style={{ color: T.muted, margin: 0 }}>Select a dataset and click Load</p>
+        </Card>
+      )}
+
+      {!loading && dsData && <UploadAnalysis dsData={dsData} dsId={selectedDataset} />}
 
       <style>{`@keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}`}</style>
     </div>
