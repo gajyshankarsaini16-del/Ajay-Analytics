@@ -1,17 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
+import { GoogleGenAI } from "@google/genai";
 
-// If using OpenAI SDK (recommended)
-import OpenAI from "openai";
-
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
+const ai = new GoogleGenAI({
+  apiKey: process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || "",
 });
 
 export async function POST(req: NextRequest) {
   try {
     const formData = await req.formData();
 
-    // Get file or text input
     const file = formData.get("file") as File | null;
     const textInput = formData.get("text") as string | null;
 
@@ -29,7 +26,6 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // 🔥 AI Analysis Prompt
     const prompt = `
 You are an advanced data analyst AI.
 
@@ -43,22 +39,12 @@ Data:
 ${content}
 `;
 
-    const response = await openai.chat.completions.create({
-      model: "gpt-4o-mini",
-      messages: [
-        {
-          role: "system",
-          content: "You are a professional data analyst.",
-        },
-        {
-          role: "user",
-          content: prompt,
-        },
-      ],
-      temperature: 0.3,
+    const response = await ai.models.generateContent({
+      model: "gemini-2.0-flash",
+      contents: `You are a professional data analyst.\n\n${prompt}`,
     });
 
-    const result = response.choices[0]?.message?.content;
+    const result = response.text;
 
     return NextResponse.json({
       success: true,
