@@ -1,173 +1,78 @@
-export const dynamic = 'force-dynamic';
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from "next/server";
 
-async function callGemini(prompt: string) {
-  const { GoogleGenAI } = await import('@google/genai');
-  const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || '' });
-  const r = await ai.models.generateContent({ model: 'gemini-2.5-flash', contents: prompt });
-  return r.text;
-}
+// If using OpenAI SDK (recommended)
+import OpenAI from "openai";
 
-async function callClaude(system: string, user: string) {
-  const r = await fetch('https://api.anthropic.com/v1/messages', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'x-api-key': process.env.ANTHROPIC_API_KEY || '',
-      'anthropic-version': '2023-06-01',
-    },
-    body: JSON.stringify({
-      model: 'claude-opus-4-5',
-      max_tokens: 800,
-      system,
-      messages: [{ role: 'user', content: user }],
-    }),
-  });
-  if (!r.ok) throw new Error('Claude API failed');
-  const d = await r.json();
-  return d.content?.[0]?.text || '';
-}
+const openai = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY,
+});
 
-export async function POST(request: Request) {
+export async function POST(req: NextRequest) {
   try {
-    const { context, type } = await request.json();
-    const useAnthropic = !!process.env.ANTHROPIC_API_KEY;
+    const formData = await req.formData();
 
-    let analysis = '';
+    // Get file or text input
+    const file = formData.get("file") as File | null;
+    const textInput = formData.get("text") as string | null;
 
-    /* ── Question-level insight ── */
-    if (type === 'question_insight') {
-      const prompt = `You are a form analytics expert. In 2-3 sentences, give a clear, specific insight about this form question's responses. Be direct and actionable. Mention the most interesting pattern.
+    let content = "";
 
-Question: "${context.label}" (type: ${context.type})
-Total answers: ${context.totalAnswers}
-Top answers: ${JSON.stringify(context.chartData?.slice(0,5))}
-
-Write in simple English. Start with the key finding directly.`;
-
-      analysis = useAnthropic
-        ? await callClaude('You are a concise data analyst. Give specific, actionable insights in 2-3 sentences.', prompt)
-        : await callGemini(prompt);
+    if (file) {
+      const fileText = await file.text();
+      content = fileText;
+    } else if (textInput) {
+      content = textInput;
+    } else {
+      return NextResponse.json(
+        { error: "No input provided" },
+        { status: 400 }
+      );
     }
 
-    /* ── Column-level insight ── */
-    else if (type === 'column_insight') {
-      const prompt = `You are a data scientist. In 2-3 sentences, give a specific insight about this dataset column. Mention anomalies, patterns, or recommendations.
+    // 🔥 AI Analysis Prompt
+    const prompt = `
+You are an advanced data analyst AI.
 
-Column: "${context.name}" (type: ${context.type})
-${context.type === 'numeric'
-  ? `Min: ${context.min}, Max: ${context.max}, Mean: ${context.mean}, Median: ${context.median}, Std: ${context.std}`
-  : `Unique values: ${context.uniqueCount}, Top values: ${JSON.stringify(context.topValues)}, Missing: ${context.missing}`}
+Analyze the following data and provide:
+1. Key Insights (important points only)
+2. Trends
+3. Summary (short)
+4. Any anomalies
 
-Be specific. Start directly with the insight.`;
+Data:
+${content}
+`;
 
-      analysis = useAnthropic
-        ? await callClaude('You are a concise data scientist. Give specific column-level insights in 2-3 sentences.', prompt)
-        : await callGemini(prompt);
-    }
+    const response = await openai.chat.completions.create({
+      model: "gpt-4o-mini",
+      messages: [
+        {
+          role: "system",
+          content: "You are a professional data analyst.",
+        },
+        {
+          role: "user",
+          content: prompt,
+        },
+      ],
+      temperature: 0.3,
+    });
 
-    /* ── Full form report ── */
-    else if (type === 'form_report') {
-      const prompt = `Analyze this form response data and provide a professional report:
+    const result = response.choices[0]?.message?.content;
 
-## Key Findings
-What are the 3 most important patterns in the responses? Be specific with numbers.
-
-## Response Quality
-Assess the completion rate and engagement quality.
-
-## Recommendations
-2-3 specific, actionable next steps based on the data.
-
-Form Data: ${JSON.stringify(context, null, 2)}`;
-
-      analysis = useAnthropic
-        ? await callClaude('You are a business intelligence analyst specializing in form data. Be specific, use actual numbers, format with markdown.', prompt)
-        : await callGemini(prompt);
-    }
-
-    /* ── Dataset report ── */
-    else if (type === 'dataset') {
-      const prompt = `Analyze this dataset and provide insights:
-
-## Dataset Overview
-What kind of data is this? What's its scale?
-
-## Key Statistical Findings
-Most important patterns, outliers, distributions (use actual numbers).
-
-## Data Quality
-Missing values, inconsistencies, issues.
-
-## Recommendations
-Top 3 actionable next steps based on this data.
-
-Dataset: ${JSON.stringify(context, null, 2)}`;
-
-      analysis = useAnthropic
-        ? await callClaude('You are a senior data scientist. Be specific, use actual numbers, format with markdown.', prompt)
-        : await callGemini(prompt);
-    }
-
-    /* ── Overall platform ── */
-    else if (type === 'overall_report') {
-      const prompt = `Generate an executive platform report:
-
-## Executive Summary
-2-3 sentence overview for stakeholders.
-
-## Platform Health
-Overall metrics assessment with specific numbers.
-
-## Top Recommendations
-3 prioritized action items.
-
-Platform Data: ${JSON.stringify(context, null, 2)}`;
-
-      analysis = useAnthropic
-        ? await callClaude('You are a C-level business intelligence advisor. Be concise and data-driven.', prompt)
-        : await callGemini(prompt);
-    }
-
-    /* ── Analytics summary ── */
-    else if (type === 'analytics') {
-      const prompt = `Analyze these platform metrics and give bullet-point insights:\n${JSON.stringify(context, null, 2)}`;
-      analysis = useAnthropic
-        ? await callClaude('You are an analytics consultant. Be concise and actionable.', prompt)
-        : await callGemini(prompt);
-    }
-
-    /* ── Report ── */
-    else if (type === 'report') {
-      const prompt = `Review this report data and provide a 2-3 paragraph professional summary with key takeaways as bullet points:\n${JSON.stringify(context, null, 2)}`;
-      analysis = useAnthropic
-        ? await callClaude('You are a business intelligence AI. Format professionally with markdown.', prompt)
-        : await callGemini(prompt);
-    }
-
-    else {
-      const prompt = `Analyze this data and provide professional insights: ${JSON.stringify(context)}`;
-      analysis = useAnthropic
-        ? await callClaude('You are a data expert.', prompt)
-        : await callGemini(prompt);
-    }
-
-    return NextResponse.json({ analysis });
+    return NextResponse.json({
+      success: true,
+      data: result,
+    });
   } catch (error: any) {
-    console.error('[AI Analyze Error]', error);
-    // Fallback to Gemini if Claude fails
-    try {
-      if (process.env.GEMINI_API_KEY) {
-        const { context, type } = await request.clone().json();
-        const { GoogleGenAI } = await import('@google/genai');
-        const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
-        const r = await ai.models.generateContent({
-          model: 'gemini-2.5-flash',
-          contents: `Analyze this ${type} data and give insights: ${JSON.stringify(context)}`
-        });
-        return NextResponse.json({ analysis: r.text });
-      }
-    } catch {}
-    return NextResponse.json({ error: error.message || 'AI analysis failed' }, { status: 500 });
+    console.error("AI Analyze Error:", error);
+
+    return NextResponse.json(
+      {
+        success: false,
+        error: error.message || "Something went wrong",
+      },
+      { status: 500 }
+    );
   }
 }
