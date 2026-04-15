@@ -121,47 +121,6 @@ function RawTable({data,colName,uniqueCount}:{data:{name:string;value:number}[];
   );
 }
 
-      </div>
-      <div style={{overflowX:'auto',borderRadius:10,border:`1px solid ${T.border}`}}>
-        <table style={{width:'100%',borderCollapse:'collapse',fontSize:'0.85rem'}}>
-          <thead>
-            <tr style={{background:T.surface}}>
-              {['#',colName,'Count','Share %','Distribution'].map(h=><th key={h} style={{padding:'10px 14px',textAlign:h==='Count'||h==='Share %'?'right':'left',color:T.dimmed,fontSize:'0.72rem',textTransform:'uppercase',letterSpacing:'0.06em',borderBottom:`1px solid ${T.border}`}}>{h}</th>)}
-            </tr>
-          </thead>
-          <tbody>
-            {paged.map((row,i)=>{
-              const pct=total>0?((row.value/total)*100).toFixed(1):'0';
-              const rank=pg*PS+i+1;
-              return(
-                <tr key={i} style={{borderBottom:`1px solid ${T.border}`,transition:'background 0.15s'}}
-                  onMouseEnter={e=>(e.currentTarget.style.background='rgba(255,255,255,0.03)')}
-                  onMouseLeave={e=>(e.currentTarget.style.background='transparent')}>
-                  <td style={{padding:'9px 14px',color:T.dimmed,fontSize:'0.75rem'}}>{rank}</td>
-                  <td style={{padding:'9px 14px',color:T.text,fontWeight:500}}>{row.name}</td>
-                  <td style={{padding:'9px 14px',textAlign:'right',color:CC[(rank-1)%CC.length],fontWeight:700}}>{row.value.toLocaleString()}</td>
-                  <td style={{padding:'9px 14px',textAlign:'right',color:T.muted,fontSize:'0.82rem'}}>{pct}%</td>
-                  <td style={{padding:'9px 14px'}}>
-                    <div style={{height:6,background:'rgba(255,255,255,0.06)',borderRadius:3,overflow:'hidden',minWidth:80}}>
-                      <div style={{height:'100%',width:`${pct}%`,background:CC[(rank-1)%CC.length],borderRadius:3,transition:'width 0.4s'}}/>
-                    </div>
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
-      {pages>1&&<div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginTop:'0.75rem',flexWrap:'wrap',gap:8}}>
-        <span style={{fontSize:'0.75rem',color:T.muted}}>{filtered.length} results · Page {pg+1}/{pages}</span>
-        <div style={{display:'flex',gap:6}}>
-          {[...Array(Math.min(pages,5))].map((_,i)=><button key={i} onClick={()=>setPg(i)} style={{width:30,height:30,borderRadius:6,border:`1px solid ${pg===i?T.accent:T.border}`,background:pg===i?`${T.accent}22`:'none',color:pg===i?T.accent:T.muted,cursor:'pointer',fontSize:'0.78rem',fontWeight:pg===i?700:400}}>{i+1}</button>)}
-        </div>
-      </div>}
-    </div>
-  );
-}
-
 /* ── Per-question auto AI insight ── */
 function QInsight({q,totalSubmissions}:{q:any;totalSubmissions:number}){
   const [txt,setTxt]=useState('');
