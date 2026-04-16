@@ -1,7 +1,5 @@
 'use client';
 
-export const dynamic = 'force-dynamic';
-
 import { useState, useEffect, useRef } from 'react';
 import {
   BarChart, Bar, PieChart, Pie, Cell, AreaChart, Area,
@@ -208,7 +206,7 @@ function DataPreview({dsId,columns}:{dsId:string;columns:any[]}){
               </tr>
             </thead>
             <tbody>
-              {filtered.slice(0,showAll?10000:20).map((row,i)=>(
+              {filtered.slice(0,showAll?9999:20).map((row,i)=>(
                 <tr key={i} style={{borderBottom:`1px solid ${T.border}`}}
                   onMouseEnter={e=>(e.currentTarget.style.background='rgba(255,255,255,0.025)')}
                   onMouseLeave={e=>(e.currentTarget.style.background='transparent')}>
@@ -237,7 +235,6 @@ function RelationPanel({columns,dsId,onClose}:{columns:any[];dsId:string;onClose
   const [result,setResult]=useState<any>(null);
   const [loading,setLoading]=useState(false);
   const [mounted,setMounted]=useState(false);
-  const [relError,setRelError]=useState('');
   useEffect(()=>setMounted(true),[]);
 
   const colNames=columns.map(c=>c.name);
@@ -245,7 +242,7 @@ function RelationPanel({columns,dsId,onClose}:{columns:any[];dsId:string;onClose
 
   const analyze=async()=>{
     if(!colA||!colB)return;
-    setLoading(true);setResult(null);setRelError('');
+    setLoading(true);setResult(null);
     try{
       // Fetch raw data
       const r=await fetch(`/api/datasets/${dsId}`);
@@ -301,10 +298,7 @@ function RelationPanel({columns,dsId,onClose}:{columns:any[];dsId:string;onClose
       const bullets=parseInsightBullets(aiD.analysis||'');
 
       setResult({chartData,chartType,context,bullets,bArr:context.catBValues});
-    }catch(e:any){
-      console.error('Relation analysis error:',e);
-      setRelError(e?.message||'Analysis failed. Please try again.');
-    }
+    }catch(e){console.error(e);}
     setLoading(false);
   };
 
@@ -376,13 +370,6 @@ function RelationPanel({columns,dsId,onClose}:{columns:any[];dsId:string;onClose
             </button>
           </div>
 
-          {/* Error */}
-          {relError&&(
-            <div style={{padding:'1rem',background:`${T.red}18`,border:`1px solid ${T.red}44`,borderRadius:12,display:'flex',alignItems:'center',gap:10}}>
-              <AlertCircle size={16} color={T.red}/>
-              <p style={{margin:0,fontSize:'0.85rem',color:T.red}}>{relError}</p>
-            </div>
-          )}
           {/* Results */}
           {result&&mounted&&(
             <div style={{display:'flex',flexDirection:'column',gap:'1.25rem'}}>
@@ -524,22 +511,22 @@ function ColInsight({col}:{col:any}){
   useEffect(()=>{
     if(done.current)return;
     done.current=true; setLoad(true);
-    const colContext=col.type==='numeric'
-      ?{min:col.min,max:col.max,mean:col.mean,median:col.median,std:col.std}
-      :col.type==='timestamp'||col.name?.toLowerCase().includes('date')||col.name?.toLowerCase().includes('time')
-        ?{uniqueCount:col.uniqueCount,missing:col.missing,sample:col.topValues?.slice(0,5)?.map((v:any)=>v.name),dateColumn:true}
-        :{uniqueCount:col.uniqueCount,topValues:col.topValues?.slice(0,10),missing:col.missing};
     fetch('/api/ai/analyze',{method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({type:'column_insight',context:{name:col.name,type:col.type,...colContext}})})
+      body:JSON.stringify({type:'column_insight',context:{name:col.name,type:col.type,...(col.type==='numeric'?{min:col.min,max:col.max,mean:col.mean,median:col.median,std:col.std}:{uniqueCount:col.uniqueCount,topValues:col.topValues?.slice(0,10),missing:col.missing})}})})
     .then(r=>r.json()).then(d=>{
       if(d.analysis){
         const raw=d.analysis;
         const lines=raw.split('\n').map((l:string)=>l.trim()).filter((l:string)=>l.length>0);
         const pts:string[]=[];
         lines.forEach((line:string)=>{
-          if(line.match(/^##|^#/)){return;} // skip headers
-          const clean=line.replace(/^[-•*●◦▸►]\s+/,'').replace(/^\d+[.):]\s+/,'').replace(/\*\*/g,'').trim();
-          if(clean.length>15&&clean.length<500){pts.push(clean);}
+          if(line.match(/^[-•*]\s+/)||line.match(/^\d+\.\s+/)){
+            pts.push(line.replace(/^[-•*\d.]+\s*/,'').replace(/\*\*/g,'').trim());
+          } else if(line.match(/^##|^#/)){
+            // skip headers
+          } else {
+            const sentences=line.split(/(?<=[.!?])\s+/).filter((s:string)=>s.trim().length>15);
+            sentences.forEach((s:string)=>pts.push(s.replace(/\*\*/g,'').trim()));
+          }
         });
         setBullets(pts.slice(0,5).filter((p:string)=>p.length>10));
       }
@@ -561,7 +548,7 @@ function ColInsight({col}:{col:any}){
           ))}
         </ul>
       )}
-      {!load&&bullets.length===0&&<p style={{margin:0,fontSize:'0.82rem',color:'rgba(241,245,249,0.4)',paddingLeft:'0.25rem'}}>{col.type==='timestamp'||col.name?.toLowerCase().includes('date')?'Date column detected — expand to explore values.':'No insight available.'}</p>}
+      {!load&&bullets.length===0&&<p style={{margin:0,fontSize:'0.82rem',color:'rgba(241,245,249,0.4)',paddingLeft:'0.25rem'}}>No insight available.</p>}
     </div>
   );
 }
@@ -723,13 +710,8 @@ function FormAnalysis({formData,formId}:{formData:any;formId:string}){
       const r=await fetch('/api/ai/analyze',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({type:'form_report',context:formData})});
       const d=await r.json();
       if(d.analysis){
-        const rawLines=d.analysis.split('\n').map((l:string)=>l.trim()).filter((l:string)=>l.length>10);
-        const lines=rawLines
-          .filter((l:string)=>!l.match(/^##|^#/))
-          .map((l:string)=>l.replace(/^[-•*●◦▸►]\s+/,'').replace(/^\d+[.):]\s+/,'').replace(/\*\*/g,'').trim())
-          .filter((l:string)=>l.length>10)
-          .slice(0,7);
-        setInsights(lines.length>0?lines:[d.analysis.slice(0,300)]);
+        const lines=d.analysis.split('\n').filter((l:string)=>l.trim().match(/^[-•*]|^\d+\.|^##/)).map((l:string)=>l.replace(/^[-•*#\d.]+\s*/,'').replace(/\*\*/g,'').trim()).filter((l:string)=>l.length>10).slice(0,7);
+        setInsights(lines.length>0?lines:[d.analysis.slice(0,200)]);
       }
     }catch{} setInsLoad(false);
   };
@@ -856,13 +838,8 @@ function DatasetAnalysis({dsData,dsId}:{dsData:any;dsId:string}){
       const r=await fetch('/api/ai/analyze',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({type:'dataset',context:dsData})});
       const d=await r.json();
       if(d.analysis){
-        const rawLines=d.analysis.split('\n').map((l:string)=>l.trim()).filter((l:string)=>l.length>10);
-        const lines=rawLines
-          .filter((l:string)=>!l.match(/^##|^#/))
-          .map((l:string)=>l.replace(/^[-•*●◦▸►]\s+/,'').replace(/^\d+[.):]\s+/,'').replace(/\*\*/g,'').trim())
-          .filter((l:string)=>l.length>10)
-          .slice(0,7);
-        setInsights(lines.length>0?lines:[d.analysis.slice(0,300)]);
+        const lines=d.analysis.split('\n').filter((l:string)=>l.trim().match(/^[-•*]|^\d+\.|^##/)).map((l:string)=>l.replace(/^[-•*#\d.]+\s*/,'').replace(/\*\*/g,'').trim()).filter((l:string)=>l.length>10).slice(0,7);
+        setInsights(lines.length>0?lines:[d.analysis.slice(0,200)]);
       }
     }catch{} setInsLoad(false);
   };
@@ -948,8 +925,7 @@ function DatasetAnalysis({dsData,dsId}:{dsData:any;dsId:string}){
             const isExp=expanded===col.name;
             const b=badge(col.type);
             const uniq=col.uniqueCount||0;
-            const isDateCol=col.type==='timestamp'||col.name?.toLowerCase().includes('date')||col.name?.toLowerCase().includes('time');
-            const useTable=(col.type==='categorical'&&uniq>UNIQUE_LIMIT)||isDateCol;
+            const useTable=col.type==='categorical'&&uniq>UNIQUE_LIMIT;
             return(
               <Card key={col.name} style={{padding:'1rem 1.25rem'}}>
                 <button onClick={()=>setExpanded(isExp?null:col.name)} style={{width:'100%',background:'none',border:'none',cursor:'pointer',display:'flex',justifyContent:'space-between',alignItems:'center',padding:0}}>
@@ -959,18 +935,13 @@ function DatasetAnalysis({dsData,dsId}:{dsData:any;dsId:string}){
                     <Chip label={col.type} color={b.color}/>
                     {useTable&&<Chip label={`${uniq} unique`} color={T.amber}/>}
                   </div>
-                  <div style={{display:'flex',alignItems:'center',gap:8,flexShrink:0,marginLeft:'1rem'}}>
+                  <div style={{display:'flex',alignItems:'center',gap:12,flexShrink:0,marginLeft:'1rem'}}>
                     <span style={{fontSize:'0.78rem',color:T.muted}}>{col.type==='numeric'?`avg: ${col.mean} · ${col.min}–${col.max}`:`${col.uniqueCount} unique`}</span>
-                    {!isExp&&uniq>0&&(
-                      <button onClick={e=>{e.stopPropagation();setExpanded(col.name);}} style={{display:'flex',alignItems:'center',gap:5,padding:'4px 10px',borderRadius:8,background:`${T.green}18`,border:`1px solid ${T.green}44`,color:T.green,cursor:'pointer',fontSize:'0.72rem',fontWeight:700,whiteSpace:'nowrap'}}>
-                        <Eye size={11}/> Show All Entries
-                      </button>
-                    )}
                     {isExp?<ChevronUp size={15} color={T.dimmed}/>:<ChevronDown size={15} color={T.dimmed}/>}
                   </div>
                 </button>
 
-                {!isExp&&<ColInsight col={col}/>
+                {!isExp&&idx<3&&<ColInsight col={col}/>}
 
                 {isExp&&mounted&&(
                   <div style={{marginTop:'1.25rem',borderTop:`1px solid ${T.border}`,paddingTop:'1.25rem'}}>
@@ -995,7 +966,7 @@ function DatasetAnalysis({dsData,dsId}:{dsData:any;dsId:string}){
                       </ResponsiveContainer>
                     </>)}
 
-                    {(col.type==='categorical'||isDateCol)&&(useTable?(
+                    {col.type==='categorical'&&(useTable?(
                       <RawTable data={col.topValues||[]} colName={col.name} uniqueCount={uniq}/>
                     ):(
                       <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'1rem'}}>
@@ -1134,4 +1105,3 @@ export default function AnalyticsPage(){
     </div>
   );
 }
-
