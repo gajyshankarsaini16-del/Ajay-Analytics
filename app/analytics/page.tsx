@@ -513,8 +513,13 @@ function ColInsight({col}:{col:any}){
   useEffect(()=>{
     if(done.current)return;
     done.current=true; setLoad(true);
+    const colContext=col.type==='numeric'
+      ?{min:col.min,max:col.max,mean:col.mean,median:col.median,std:col.std}
+      :col.type==='timestamp'||col.name?.toLowerCase().includes('date')||col.name?.toLowerCase().includes('time')
+        ?{uniqueCount:col.uniqueCount,missing:col.missing,sample:col.topValues?.slice(0,5)?.map((v:any)=>v.name),dateColumn:true}
+        :{uniqueCount:col.uniqueCount,topValues:col.topValues?.slice(0,10),missing:col.missing};
     fetch('/api/ai/analyze',{method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({type:'column_insight',context:{name:col.name,type:col.type,...(col.type==='numeric'?{min:col.min,max:col.max,mean:col.mean,median:col.median,std:col.std}:{uniqueCount:col.uniqueCount,topValues:col.topValues?.slice(0,10),missing:col.missing})}})})
+      body:JSON.stringify({type:'column_insight',context:{name:col.name,type:col.type,...colContext}})})
     .then(r=>r.json()).then(d=>{
       if(d.analysis){
         const raw=d.analysis;
@@ -550,7 +555,7 @@ function ColInsight({col}:{col:any}){
           ))}
         </ul>
       )}
-      {!load&&bullets.length===0&&<p style={{margin:0,fontSize:'0.82rem',color:'rgba(241,245,249,0.4)',paddingLeft:'0.25rem'}}>No insight available.</p>}
+      {!load&&bullets.length===0&&<p style={{margin:0,fontSize:'0.82rem',color:'rgba(241,245,249,0.4)',paddingLeft:'0.25rem'}}>{col.type==='timestamp'||col.name?.toLowerCase().includes('date')?'Date column detected — expand to explore values.':'No insight available.'}</p>}
     </div>
   );
 }
@@ -927,7 +932,8 @@ function DatasetAnalysis({dsData,dsId}:{dsData:any;dsId:string}){
             const isExp=expanded===col.name;
             const b=badge(col.type);
             const uniq=col.uniqueCount||0;
-            const useTable=col.type==='categorical'&&uniq>UNIQUE_LIMIT;
+            const isDateCol=col.type==='timestamp'||col.name?.toLowerCase().includes('date')||col.name?.toLowerCase().includes('time');
+            const useTable=(col.type==='categorical'&&uniq>UNIQUE_LIMIT)||isDateCol;
             return(
               <Card key={col.name} style={{padding:'1rem 1.25rem'}}>
                 <button onClick={()=>setExpanded(isExp?null:col.name)} style={{width:'100%',background:'none',border:'none',cursor:'pointer',display:'flex',justifyContent:'space-between',alignItems:'center',padding:0}}>
@@ -968,7 +974,7 @@ function DatasetAnalysis({dsData,dsId}:{dsData:any;dsId:string}){
                       </ResponsiveContainer>
                     </>)}
 
-                    {col.type==='categorical'&&(useTable?(
+                    {(col.type==='categorical'||isDateCol)&&(useTable?(
                       <RawTable data={col.topValues||[]} colName={col.name} uniqueCount={uniq}/>
                     ):(
                       <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'1rem'}}>
@@ -1107,3 +1113,4 @@ export default function AnalyticsPage(){
     </div>
   );
 }
+
