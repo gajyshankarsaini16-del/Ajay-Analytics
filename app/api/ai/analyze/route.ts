@@ -1,146 +1,204 @@
-import { NextRequest, NextResponse } from "next/server";
-import { GoogleGenAI } from "@google/genai";
+export const dynamic = 'force-dynamic';
+import { NextResponse } from 'next/server';
 
-const ai = new GoogleGenAI({
-  apiKey: process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || "",
-});
-
-function buildPrompt(type: string, context: any): string {
-  switch (type) {
-    case "column_insight":
-      if (context.type === "numeric") {
-        return `You are a data analyst. Analyze this numeric column and give exactly 4-5 bullet point insights.
-Column: "${context.name}"
-Stats: min=${context.min}, max=${context.max}, mean=${context.mean}, median=${context.median}, std=${context.std}
-Rules:
-- Start each bullet with "- "
-- Include: range interpretation, spread/variability, outlier risk, business meaning
-- Be specific with numbers
-- No headers, no markdown bold, just plain bullet points`;
-      } else if (context.dateColumn) {
-        return `You are a data analyst. Analyze this date/time column and give exactly 4-5 bullet point insights.
-Column: "${context.name}"
-Unique dates: ${context.uniqueCount}, Missing: ${context.missing}
-Sample values: ${(context.sample || []).join(", ")}
-Rules:
-- Start each bullet with "- "
-- Include: date range, granularity, coverage, gaps, business meaning
-- Be specific
-- No headers, no markdown bold, just plain bullet points`;
-      } else {
-        return `You are a data analyst. Analyze this categorical column and give exactly 4-5 bullet point insights.
-Column: "${context.name}"
-Unique values: ${context.uniqueCount}, Missing: ${context.missing}
-Top values: ${(context.topValues || []).slice(0, 8).map((v: any) => `${v.name}(${v.value})`).join(", ")}
-Rules:
-- Start each bullet with "- "
-- Include: distribution, dominant categories, concentration, business meaning
-- Be specific with numbers and percentages
-- No headers, no markdown bold, just plain bullet points`;
-      }
-
-    case "relation_insight":
-      const ctx = context;
-      return `You are a data analyst. Analyze the relationship between two columns and give exactly 5-6 bullet point insights.
-Column A: "${ctx.colA}" (${ctx.typeA})
-Column B: "${ctx.colB}" (${ctx.typeB})
-Relation type: ${ctx.typeA === "numeric" && ctx.typeB === "numeric" ? `Correlation (Pearson r = ${ctx.pearsonR}, ${ctx.strength} ${ctx.direction})` : "Group averages"}
-Sample data: ${JSON.stringify(ctx.sampleData?.slice(0, 6))}
-Row count: ${ctx.rowCount}
-Rules:
-- Start each bullet with "- "
-- Include: pattern description, strongest/weakest group, anomalies, business action
-- Be specific with the actual values from the data
-- No headers, no markdown bold, just plain bullet points`;
-
-    case "question_insight":
-      return `You are a data analyst. Analyze this survey question and give a 2-3 sentence insight.
-Question: "${context.label}" (type: ${context.type})
-Total answers: ${context.totalAnswers}
-Data: ${JSON.stringify(context.chartData?.slice(0, 10))}
-Rules:
-- Plain sentences, no bullets, no headers
-- Include dominant answer, distribution pattern, actionable observation`;
-
-    case "form_report":
-      return `You are a data analyst. Analyze this form/survey data and give 6-7 bullet point insights.
-Form: "${context.formTitle}"
-Total submissions: ${context.totalSubmissions}
-Questions: ${context.questions?.length}
-Top questions by response: ${context.questions?.slice(0, 5).map((q: any) => `${q.label}(${q.totalAnswers})`).join(", ")}
-Rules:
-- Start each bullet with "- "
-- Include: participation rate, popular questions, drop-off, patterns, recommendations
-- Be specific
-- No headers, no markdown bold`;
-
-    case "dataset":
-      return `You are a data analyst. Analyze this dataset overview and give 6-7 bullet point insights.
-Dataset: "${context.filename}"
-Rows: ${context.rowCount}, Columns: ${context.columnCount}
-Column types: ${context.columns?.map((c: any) => `${c.name}(${c.type})`).join(", ")}
-Numeric columns summary: ${context.columns?.filter((c: any) => c.type === "numeric").slice(0, 5).map((c: any) => `${c.name}: mean=${c.mean}, min=${c.min}, max=${c.max}`).join("; ")}
-Rules:
-- Start each bullet with "- "
-- Include: data shape, numeric patterns, categorical diversity, data quality, business insights
-- Be specific with actual column names and values
-- No headers, no markdown bold`;
-
-    default:
-      return `Analyze the following data and provide 5 bullet point insights:\n${JSON.stringify(context)}`;
-  }
+async function callGemini(prompt: string) {
+  const { GoogleGenAI } = await import('@google/genai');
+  const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || '' });
+  const r = await ai.models.generateContent({ model: 'gemini-2.5-flash', contents: prompt });
+  return r.text;
 }
 
-export async function POST(req: NextRequest) {
+async function callClaude(system: string, user: string) {
+  const r = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-api-key': process.env.ANTHROPIC_API_KEY || '',
+      'anthropic-version': '2023-06-01',
+    },
+    body: JSON.stringify({
+      model: 'claude-opus-4-5',
+      max_tokens: 800,
+      system,
+      messages: [{ role: 'user', content: user }],
+    }),
+  });
+  if (!r.ok) throw new Error('Claude API failed');
+  const d = await r.json();
+  return d.content?.[0]?.text || '';
+}
+
+export async function POST(request: Request) {
   try {
-    const contentType = req.headers.get("content-type") || "";
+    const { context, type } = await request.json();
+    const useAnthropic = !!process.env.ANTHROPIC_API_KEY;
 
-    let type = "general";
-    let context: any = {};
-    let content = "";
+    let analysis = '';
 
-    // Handle both JSON and FormData
-    if (contentType.includes("application/json")) {
-      const body = await req.json();
-      type = body.type || "general";
-      context = body.context || body;
-    } else {
-      // Legacy formData support
-      const formData = await req.formData();
-      const file = formData.get("file") as File | null;
-      const textInput = formData.get("text") as string | null;
-      if (file) {
-        content = await file.text();
-      } else if (textInput) {
-        content = textInput;
-      } else {
-        return NextResponse.json({ error: "No input provided" }, { status: 400 });
-      }
-      type = "general";
-      context = { content };
+    /* ── Question-level insight ── */
+    if (type === 'question_insight') {
+      const prompt = `You are a form analytics expert. In 2-3 sentences, give a clear, specific insight about this form question's responses. Be direct and actionable. Mention the most interesting pattern.
+
+Question: "${context.label}" (type: ${context.type})
+Total answers: ${context.totalAnswers}
+Top answers: ${JSON.stringify(context.chartData?.slice(0,5))}
+
+Write in simple English. Start with the key finding directly.`;
+
+      analysis = useAnthropic
+        ? await callClaude('You are a concise data analyst. Give specific, actionable insights in 2-3 sentences.', prompt)
+        : await callGemini(prompt);
     }
 
-    const prompt = type === "general" && content
-      ? `You are an advanced data analyst AI. Analyze the following data and provide:\n1. Key Insights\n2. Trends\n3. Summary\n4. Anomalies\n\nData:\n${content}`
-      : buildPrompt(type, context);
+    /* ── Column-level insight ── */
+    else if (type === 'column_insight') {
+      const prompt = `You are a data scientist. In 2-3 sentences, give a specific insight about this dataset column. Mention anomalies, patterns, or recommendations.
 
-    const response = await ai.models.generateContent({
-      model: "gemini-2.0-flash",
-      contents: prompt,
-    });
+Column: "${context.name}" (type: ${context.type})
+${context.type === 'numeric'
+  ? `Min: ${context.min}, Max: ${context.max}, Mean: ${context.mean}, Median: ${context.median}, Std: ${context.std}`
+  : `Unique values: ${context.uniqueCount}, Top values: ${JSON.stringify(context.topValues)}, Missing: ${context.missing}`}
 
-    const result = response.text || "";
+Be specific. Start directly with the insight.`;
 
-    return NextResponse.json({
-      success: true,
-      analysis: result,   // ← page.tsx reads d.analysis
-      data: result,       // ← legacy compat
-    });
+      analysis = useAnthropic
+        ? await callClaude('You are a concise data scientist. Give specific column-level insights in 2-3 sentences.', prompt)
+        : await callGemini(prompt);
+    }
+
+    /* ── Full form report ── */
+    else if (type === 'form_report') {
+      const prompt = `Analyze this form response data and provide a professional report:
+
+## Key Findings
+What are the 3 most important patterns in the responses? Be specific with numbers.
+
+## Response Quality
+Assess the completion rate and engagement quality.
+
+## Recommendations
+2-3 specific, actionable next steps based on the data.
+
+Form Data: ${JSON.stringify(context, null, 2)}`;
+
+      analysis = useAnthropic
+        ? await callClaude('You are a business intelligence analyst specializing in form data. Be specific, use actual numbers, format with markdown.', prompt)
+        : await callGemini(prompt);
+    }
+
+    /* ── Dataset report ── */
+    else if (type === 'dataset') {
+      const prompt = `Analyze this dataset and provide insights:
+
+## Dataset Overview
+What kind of data is this? What's its scale?
+
+## Key Statistical Findings
+Most important patterns, outliers, distributions (use actual numbers).
+
+## Data Quality
+Missing values, inconsistencies, issues.
+
+## Recommendations
+Top 3 actionable next steps based on this data.
+
+Dataset: ${JSON.stringify(context, null, 2)}`;
+
+      analysis = useAnthropic
+        ? await callClaude('You are a senior data scientist. Be specific, use actual numbers, format with markdown.', prompt)
+        : await callGemini(prompt);
+    }
+
+    /* ── Overall platform ── */
+    else if (type === 'overall_report') {
+      const prompt = `Generate an executive platform report:
+
+## Executive Summary
+2-3 sentence overview for stakeholders.
+
+## Platform Health
+Overall metrics assessment with specific numbers.
+
+## Top Recommendations
+3 prioritized action items.
+
+Platform Data: ${JSON.stringify(context, null, 2)}`;
+
+      analysis = useAnthropic
+        ? await callClaude('You are a C-level business intelligence advisor. Be concise and data-driven.', prompt)
+        : await callGemini(prompt);
+    }
+
+    /* ── Analytics summary ── */
+    else if (type === 'analytics') {
+      const prompt = `Analyze these platform metrics and give bullet-point insights:\n${JSON.stringify(context, null, 2)}`;
+      analysis = useAnthropic
+        ? await callClaude('You are an analytics consultant. Be concise and actionable.', prompt)
+        : await callGemini(prompt);
+    }
+
+    /* ── Report ── */
+    else if (type === 'report') {
+      const prompt = `Review this report data and provide a 2-3 paragraph professional summary with key takeaways as bullet points:\n${JSON.stringify(context, null, 2)}`;
+      analysis = useAnthropic
+        ? await callClaude('You are a business intelligence AI. Format professionally with markdown.', prompt)
+        : await callGemini(prompt);
+    }
+
+    /* ── Relation insight ── */
+    else if (type === 'relation_insight') {
+      const c = context;
+      const relType = c.typeA==='numeric'&&c.typeB==='numeric' ? 'Numerical correlation (Pearson r)' 
+                    : c.typeA==='categorical'&&c.typeB==='categorical' ? 'Categorical frequency distribution' 
+                    : 'Category vs Numeric aggregation';
+      const prompt = `You are a senior business data analyst. Analyze the relationship between "${c.colA}" (${c.typeA}) and "${c.colB}" (${c.typeB}).
+
+Relationship Type: ${relType}
+Dataset: ${c.rowCount} rows
+${c.pearsonR!==undefined?`Pearson r = ${c.pearsonR} → ${c.strength} ${c.direction} correlation`:''}
+${c.top?`Highest group: ${c.top.name} (avg ${c.colA||c.colB}: ${c.top.avg})`:''}
+${c.bottom?`Lowest group: ${c.bottom.name} (avg: ${c.bottom.avg})`:''}
+${c.catBValues?`Sub-categories: ${c.catBValues.join(', ')}`:''}
+${c.uniqueA?`${c.colA}: ${c.uniqueA} unique values, ${c.colB}: ${c.uniqueB} unique values`:''}
+
+Sample aggregated data:
+${JSON.stringify(c.sampleData, null, 2)}
+
+Output EXACTLY 5-6 bullet points. Rules:
+- Each point must start with "- "
+- Include specific numbers/percentages
+- Be actionable and business-focused
+- Max 25 words per bullet
+- No headings, no extra explanation`;
+
+      analysis = useAnthropic
+        ? await callClaude('You are a concise data analyst. Output ONLY bullet points starting with "- ". No headers. No preamble.', prompt)
+        : await callGemini(prompt);
+    }
+
+    else {
+      const prompt = `Analyze this data and provide professional insights: ${JSON.stringify(context)}`;
+      analysis = useAnthropic
+        ? await callClaude('You are a data expert.', prompt)
+        : await callGemini(prompt);
+    }
+
+    return NextResponse.json({ analysis });
   } catch (error: any) {
-    console.error("AI Analyze Error:", error);
-    return NextResponse.json(
-      { success: false, error: error.message || "Something went wrong", analysis: "" },
-      { status: 500 }
-    );
+    console.error('[AI Analyze Error]', error);
+    // Fallback to Gemini if Claude fails
+    try {
+      if (process.env.GEMINI_API_KEY) {
+        const { context, type } = await request.clone().json();
+        const { GoogleGenAI } = await import('@google/genai');
+        const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+        const r = await ai.models.generateContent({
+          model: 'gemini-2.5-flash',
+          contents: `Analyze this ${type} data and give insights: ${JSON.stringify(context)}`
+        });
+        return NextResponse.json({ analysis: r.text });
+      }
+    } catch {}
+    return NextResponse.json({ error: error.message || 'AI analysis failed' }, { status: 500 });
   }
 }
