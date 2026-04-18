@@ -3,55 +3,59 @@
 import { useState, useCallback } from 'react';
 import * as XLSX from 'xlsx';
 import Papa from 'papaparse';
-import { Upload as UploadIcon, FileUp, CheckCircle, AlertTriangle, Loader2, FileText, ChevronLeft, ChevronRight, BarChart2 } from 'lucide-react';
+import {
+  Upload as UploadIcon, FileUp, CheckCircle, AlertTriangle,
+  Loader2, FileText, ChevronLeft, ChevronRight, BarChart2,
+  Sparkles, Wand2, RefreshCw
+} from 'lucide-react';
 import styles from './Upload.module.css';
 import Link from 'next/link';
 
 const PAGE_SIZE = 20;
 
 export default function UploadPage() {
-  const [isDragging, setIsDragging]     = useState(false);
-  const [file, setFile]                 = useState<File | null>(null);
-  const [allRows, setAllRows]           = useState<any[]>([]);
-  const [columns, setColumns]           = useState<string[]>([]);
-  const [page, setPage]                 = useState(0);
-  const [isUploading, setIsUploading]   = useState(false);
-  const [message, setMessage]           = useState({ text: '', type: '' });
-  const [savedId, setSavedId]           = useState<string | null>(null);
+  const [isDragging, setIsDragging]   = useState(false);
+  const [file, setFile]               = useState<File | null>(null);
+  const [allRows, setAllRows]         = useState<any[]>([]);
+  const [columns, setColumns]         = useState<string[]>([]);
+  const [page, setPage]               = useState(0);
+  const [isUploading, setIsUploading] = useState(false);
+  const [message, setMessage]         = useState({ text: '', type: '' });
+  const [savedId, setSavedId]         = useState<string | null>(null);
+
+  // Cleaning states
+  const [isCleaning, setIsCleaning]   = useState(false);
+  const [cleanReport, setCleanReport] = useState<string[]>([]);
+  const [cleanDone, setCleanDone]     = useState(false);
+  const [cleanedRows, setCleanedRows] = useState(0);
 
   const handleDragOver  = useCallback((e: React.DragEvent) => { e.preventDefault(); setIsDragging(true);  }, []);
   const handleDragLeave = useCallback((e: React.DragEvent) => { e.preventDefault(); setIsDragging(false); }, []);
 
   const processFile = async (selectedFile: File) => {
     setFile(selectedFile);
-    setSavedId(null);
-    setMessage({ text: '', type: '' });
-    setPage(0);
+    setSavedId(null); setCleanReport([]); setCleanDone(false);
+    setMessage({ text: '', type: '' }); setPage(0);
 
     try {
       let rows: any[] = [];
-
       if (selectedFile.name.endsWith('.csv')) {
-        await new Promise<void>((resolve, reject) => {
+        await new Promise<void>((res, rej) => {
           Papa.parse(selectedFile, {
-            header: true,
-            skipEmptyLines: true,
-            complete: (r: any) => { rows = r.data; resolve(); },
-            error:    (e: any) => reject(new Error(e.message)),
+            header: true, skipEmptyLines: true,
+            complete: (r: any) => { rows = r.data; res(); },
+            error:   (e: any) => rej(new Error(e.message)),
           });
         });
       } else if (/\.(xlsx|xls)$/i.test(selectedFile.name)) {
         const buf = await selectedFile.arrayBuffer();
         const wb  = XLSX.read(buf, { type: 'array' });
-        const ws  = wb.Sheets[wb.SheetNames[0]];
-        rows      = XLSX.utils.sheet_to_json(ws);
+        rows      = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]]);
       } else {
-        setMessage({ text: 'Unsupported format. Please upload CSV, XLSX or XLS.', type: 'error' });
+        setMessage({ text: 'Unsupported format. CSV, XLSX, XLS only.', type: 'error' });
         return;
       }
-
       if (rows.length === 0) { setMessage({ text: 'File is empty.', type: 'error' }); return; }
-
       setAllRows(rows);
       setColumns(Object.keys(rows[0]));
     } catch (err: any) {
@@ -75,18 +79,40 @@ export default function UploadPage() {
 
     try {
       const res  = await fetch('/api/datasets', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ filename: file.name, data: allRows }),
       });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error || 'Upload failed');
       setSavedId(json.id);
       setMessage({ text: `"${file.name}" saved! (${allRows.length} rows, ${columns.length} columns)`, type: 'success' });
+
+      // Auto-trigger cleaning
+      triggerCleaning(json.id);
     } catch (err: any) {
       setMessage({ text: err.message || 'Upload failed', type: 'error' });
     } finally {
       setIsUploading(false);
+    }
+  };
+
+  const triggerCleaning = async (id: string) => {
+    setIsCleaning(true);
+    setCleanReport(['⏳ Auto-cleaning in progress...']);
+    try {
+      const res  = await fetch('/api/datasets/clean', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ datasetId: id })
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || 'Cleaning failed');
+      setCleanReport(json.report || []);
+      setCleanedRows(json.cleanedRows);
+      setCleanDone(true);
+    } catch (err: any) {
+      setCleanReport([`❌ Cleaning error: ${err.message}`]);
+    } finally {
+      setIsCleaning(false);
     }
   };
 
@@ -96,14 +122,14 @@ export default function UploadPage() {
   return (
     <div className={styles.container}>
       <h1 className="page-title">Upload Data</h1>
-      <p className="page-subtitle">Upload Excel or CSV files — preview the full data, then save to generate analytics.</p>
+      <p className="page-subtitle">
+        Upload CSV or Excel — data auto-cleans on save, phir deep analysis available hoti hai.
+      </p>
 
       {!file && (
         <div
           className={`${styles.dropzone} ${isDragging ? styles.dragging : ''} glass-panel`}
-          onDragOver={handleDragOver}
-          onDragLeave={handleDragLeave}
-          onDrop={handleDrop}
+          onDragOver={handleDragOver} onDragLeave={handleDragLeave} onDrop={handleDrop}
           onClick={() => document.getElementById('fileUpload')?.click()}
         >
           <input type="file" id="fileUpload" className={styles.hiddenInput}
@@ -111,8 +137,8 @@ export default function UploadPage() {
           <div className={styles.dropContent}>
             <div className={styles.iconCircle}><FileUp size={40} className={styles.uploadIcon} /></div>
             <h3>Drag &amp; drop your file here</h3>
-            <p>or click to browse from your computer</p>
-            <span className={styles.formats}>Supported: CSV · XLSX · XLS</span>
+            <p>or click to browse</p>
+            <span className={styles.formats}>CSV · XLSX · XLS</span>
           </div>
         </div>
       )}
@@ -124,20 +150,58 @@ export default function UploadPage() {
         </div>
       )}
 
+      {/* Auto-clean report */}
+      {(isCleaning || cleanReport.length > 0) && (
+        <div style={{
+          background: 'rgba(16,185,129,0.06)', border: '1px solid rgba(16,185,129,0.2)',
+          borderRadius: '12px', padding: '1.25rem', marginBottom: '1rem'
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '0.75rem' }}>
+            {isCleaning
+              ? <Loader2 size={16} style={{ animation: 'spin 1s linear infinite', color: '#10b981' }} />
+              : <Wand2 size={16} style={{ color: '#10b981' }} />}
+            <span style={{ color: '#10b981', fontWeight: 600, fontSize: '0.9rem' }}>
+              {isCleaning ? 'Auto-cleaning...' : '✅ Auto-cleaning complete!'}
+            </span>
+            {cleanDone && (
+              <span style={{ fontSize: '0.78rem', color: 'rgba(255,255,255,0.4)', marginLeft: 'auto' }}>
+                {cleanedRows.toLocaleString()} clean rows ready
+              </span>
+            )}
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
+            {cleanReport.map((line, i) => (
+              <p key={i} style={{ margin: 0, fontSize: '0.8rem', color: 'rgba(255,255,255,0.65)', lineHeight: 1.5 }}>
+                {line}
+              </p>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Post-save actions */}
       {savedId && (
         <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap', marginBottom: '1rem' }}>
-          <Link href={`/datasets/${savedId}`}
+          <Link href={`/analytics`}
             className="btn-primary"
             style={{ display: 'inline-flex', alignItems: 'center', gap: '8px' }}>
             <BarChart2 size={18} /> View Analytics
           </Link>
+          <Link href={`/datasets/${savedId}/deep`}
+            style={{ display: 'inline-flex', alignItems: 'center', gap: '8px',
+              padding: '10px 18px', background: 'rgba(99,102,241,0.15)',
+              border: '1px solid #6366f1', borderRadius: '8px', color: '#a5b4fc',
+              textDecoration: 'none', fontWeight: 600, fontSize: '0.875rem' }}>
+            <Sparkles size={18} /> Deep Analysis
+          </Link>
           <button className="btn-secondary"
-            onClick={() => { setFile(null); setAllRows([]); setColumns([]); setSavedId(null); setMessage({ text: '', type: '' }); }}>
-            Upload Another File
+            onClick={() => { setFile(null); setAllRows([]); setColumns([]); setSavedId(null); setMessage({ text: '', type: '' }); setCleanReport([]); setCleanDone(false); }}>
+            Upload Another
           </button>
         </div>
       )}
 
+      {/* Preview table */}
       {file && allRows.length > 0 && (
         <div className={`${styles.previewCard} glass-panel`}>
           <div className={styles.previewHeader}>
@@ -152,11 +216,12 @@ export default function UploadPage() {
               <button className="btn-primary" onClick={handleUpload} disabled={isUploading}>
                 {isUploading
                   ? <><Loader2 className={styles.spinner} size={18} /> Saving...</>
-                  : <><UploadIcon size={18} /> Save Dataset</>}
+                  : <><UploadIcon size={18} /> Save &amp; Auto-Clean</>}
               </button>
             )}
           </div>
 
+          {/* Column pills */}
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', margin: '0.75rem 0' }}>
             {columns.map(col => (
               <span key={col} style={{
@@ -168,9 +233,7 @@ export default function UploadPage() {
           </div>
 
           <div className={styles.tableWrapper}>
-            <h5>
-              Rows {page * PAGE_SIZE + 1}–{Math.min((page + 1) * PAGE_SIZE, allRows.length)} of {allRows.length.toLocaleString()}
-            </h5>
+            <h5>Rows {page * PAGE_SIZE + 1}–{Math.min((page + 1) * PAGE_SIZE, allRows.length)} of {allRows.length.toLocaleString()}</h5>
             <table className={styles.table}>
               <thead>
                 <tr>
@@ -181,9 +244,7 @@ export default function UploadPage() {
               <tbody>
                 {visibleRows.map((row, i) => (
                   <tr key={i}>
-                    <td style={{ color: 'rgba(255,255,255,0.3)', fontSize: '0.75rem' }}>
-                      {page * PAGE_SIZE + i + 1}
-                    </td>
+                    <td style={{ color: 'rgba(255,255,255,0.3)', fontSize: '0.75rem' }}>{page * PAGE_SIZE + i + 1}</td>
                     {columns.map(col => (
                       <td key={col}>
                         {typeof row[col] === 'object' ? JSON.stringify(row[col]) : String(row[col] ?? '')}
@@ -216,6 +277,8 @@ export default function UploadPage() {
           )}
         </div>
       )}
+
+      <style>{`@keyframes spin { from{transform:rotate(0deg)} to{transform:rotate(360deg)} }`}</style>
     </div>
   );
 }

@@ -14,17 +14,18 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
   }, []);
 
   const isPublicForm = pathname?.startsWith('/f/');
+  const isLoginPage  = pathname === '/login';
 
   if (!mounted) {
     return (
-      <main style={{ minHeight: '100vh', background: '#0f172a' }}>
-      </main>
+      <main style={{ minHeight: '100vh', background: '#0f172a' }}></main>
     );
   }
 
-  if (isPublicForm) {
+  // No sidebar for public form and login page
+  if (isPublicForm || isLoginPage) {
     return (
-      <main className={layoutStyles.layout} style={{ overflowY: 'auto' }}>
+      <main style={{ minHeight: '100vh', overflowY: 'auto' }}>
         {children as React.ReactNode}
       </main>
     );
