@@ -58,7 +58,7 @@ function RawTable({data,colName,uniqueCount}:{data:{name:string;value:number}[];
   const [dir,setDir]=useState<'asc'|'desc'>('desc');
   const [q,setQ]=useState('');
   const [pg,setPg]=useState(0);
-  const PS=50;
+  const [PS,setPS]=useState(50);
   const filtered=data.filter(r=>r.name.toLowerCase().includes(q.toLowerCase())).sort((a,b)=>dir==='desc'?b.value-a.value:a.value-b.value);
   const paged=filtered.slice(pg*PS,(pg+1)*PS);
   const pages=Math.ceil(filtered.length/PS);
@@ -68,7 +68,7 @@ function RawTable({data,colName,uniqueCount}:{data:{name:string;value:number}[];
       <div style={{display:'flex',alignItems:'center',gap:'0.75rem',marginBottom:'0.75rem',flexWrap:'wrap'}}>
         <div style={{display:'flex',alignItems:'center',gap:6,padding:'5px 12px',background:`${T.amber}18`,border:`1px solid ${T.amber}44`,borderRadius:8}}>
           <Table2 size={13} color={T.amber}/>
-          <span style={{fontSize:'0.75rem',color:T.amber,fontWeight:600}}>{uniqueCount} unique values — showing all</span>
+          <span style={{fontSize:'0.75rem',color:T.amber,fontWeight:600}}>{data.length.toLocaleString()} / {uniqueCount.toLocaleString()} unique values loaded</span>
         </div>
         <input value={q} onChange={e=>{setQ(e.target.value);setPg(0);}} placeholder="Search values…"
           style={{flex:1,minWidth:160,padding:'6px 12px',background:T.surface,border:`1px solid ${T.border}`,borderRadius:8,color:T.text,fontSize:'0.82rem',outline:'none'}}/>
@@ -106,17 +106,23 @@ function RawTable({data,colName,uniqueCount}:{data:{name:string;value:number}[];
           </tbody>
         </table>
       </div>
-      {pages>1&&<div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginTop:'0.75rem',flexWrap:'wrap',gap:8}}>
-        <span style={{fontSize:'0.75rem',color:T.muted}}>{filtered.length} results · Page {pg+1}/{pages}</span>
-        <div style={{display:'flex',gap:6}}>
+      <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginTop:'0.75rem',flexWrap:'wrap',gap:8}}>
+        <div style={{display:'flex',alignItems:'center',gap:'0.5rem'}}>
+          <span style={{fontSize:'0.75rem',color:T.muted}}>{filtered.length.toLocaleString()} results · Page {pg+1}/{pages||1}</span>
+          <select value={PS} onChange={e=>{setPS(Number(e.target.value));setPg(0);}}
+            style={{padding:'3px 8px',borderRadius:6,border:`1px solid ${T.border}`,background:T.surface,color:T.muted,fontSize:'0.75rem',cursor:'pointer',outline:'none'}}>
+            {[25,50,100,250,500].map(n=><option key={n} value={n}>{n} per page</option>)}
+          </select>
+        </div>
+        {pages>1&&<div style={{display:'flex',gap:6}}>
           <button onClick={()=>setPg(p=>Math.max(0,p-1))} disabled={pg===0} style={{padding:'5px 10px',borderRadius:6,border:`1px solid ${T.border}`,background:'none',color:pg===0?T.dimmed:T.muted,cursor:pg===0?'not-allowed':'pointer',fontSize:'0.78rem'}}>← Prev</button>
           {[...Array(Math.min(pages,7))].map((_,i)=>{
             const pageIdx=pages<=7?i:pg<4?i:pg>pages-4?pages-7+i:pg-3+i;
             return<button key={pageIdx} onClick={()=>setPg(pageIdx)} style={{width:30,height:30,borderRadius:6,border:`1px solid ${pg===pageIdx?T.accent:T.border}`,background:pg===pageIdx?`${T.accent}22`:'none',color:pg===pageIdx?T.accent:T.muted,cursor:'pointer',fontSize:'0.78rem',fontWeight:pg===pageIdx?700:400}}>{pageIdx+1}</button>;
           })}
           <button onClick={()=>setPg(p=>Math.min(pages-1,p+1))} disabled={pg===pages-1} style={{padding:'5px 10px',borderRadius:6,border:`1px solid ${T.border}`,background:'none',color:pg===pages-1?T.dimmed:T.muted,cursor:pg===pages-1?'not-allowed':'pointer',fontSize:'0.78rem'}}>Next →</button>
-        </div>
-      </div>}
+        </div>}
+      </div>
     </div>
   );
 }
