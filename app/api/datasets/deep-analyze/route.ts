@@ -172,7 +172,7 @@ Be specific, use actual numbers from the data. Write like a senior data scientis
         const r = await fetch('https://api.anthropic.com/v1/messages', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'x-api-key': process.env.ANTHROPIC_API_KEY, 'anthropic-version': '2023-06-01' },
-          body: JSON.stringify({ model: 'claude-opus-4-5', max_tokens: 1500,
+          body: JSON.stringify({ model: 'claude-sonnet-4-5', max_tokens: 1500,
             system: 'You are a senior data scientist providing detailed, specific analysis. Use markdown formatting.',
             messages: [{ role: 'user', content: aiPrompt }] })
         });
