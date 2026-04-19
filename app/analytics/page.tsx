@@ -25,7 +25,7 @@ const T = {
   dimmed:'rgba(241,245,249,0.2)',
 };
 const CC = ['#2563eb','#7c3aed','#10b981','#f59e0b','#ec4899','#06b6d4','#f97316','#84cc16'];
-const UNIQUE_LIMIT = 8;
+const UNIQUE_LIMIT = 20;
 
 const Card=({children,style,id}:any)=><div id={id} style={{background:T.card,border:`1px solid ${T.border}`,borderRadius:16,padding:'1.5rem',...style}}>{children}</div>;
 const Chip=({label,color=T.accent}:any)=><span style={{display:'inline-flex',alignItems:'center',padding:'3px 10px',borderRadius:20,fontSize:'0.72rem',fontWeight:600,background:`${color}22`,border:`1px solid ${color}44`,color,letterSpacing:'0.04em'}}>{label}</span>;
@@ -935,8 +935,13 @@ function DatasetAnalysis({dsData,dsId}:{dsData:any;dsId:string}){
                     <Chip label={col.type} color={b.color}/>
                     {useTable&&<Chip label={`${uniq} unique`} color={T.amber}/>}
                   </div>
-                  <div style={{display:'flex',alignItems:'center',gap:12,flexShrink:0,marginLeft:'1rem'}}>
+                  <div style={{display:'flex',alignItems:'center',gap:8,flexShrink:0,marginLeft:'1rem'}}>
                     <span style={{fontSize:'0.78rem',color:T.muted}}>{col.type==='numeric'?`avg: ${col.mean} · ${col.min}–${col.max}`:`${col.uniqueCount} unique`}</span>
+                    {col.type==='categorical'&&uniq>20&&!isExp&&(
+                      <button onClick={e=>{e.stopPropagation();setExpanded(col.name);}} style={{fontSize:'0.68rem',padding:'2px 8px',borderRadius:6,background:`${T.accent}22`,border:`1px solid ${T.accent}55`,color:T.accent,cursor:'pointer',fontWeight:700,whiteSpace:'nowrap',flexShrink:0}}>
+                        Show All
+                      </button>
+                    )}
                     {isExp?<ChevronUp size={15} color={T.dimmed}/>:<ChevronDown size={15} color={T.dimmed}/>}
                   </div>
                 </button>
