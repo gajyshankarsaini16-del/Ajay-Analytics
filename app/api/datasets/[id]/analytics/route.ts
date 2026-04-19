@@ -53,7 +53,7 @@ function categoricalStats(values: any[]) {
   return {
     count: values.length,
     uniqueCount: sorted.length,
-    topValues: sorted.slice(0, 50).map(([name, value]) => ({ name, value })),
+    topValues: sorted.map(([name, value]) => ({ name, value })),
     missing: values.filter(v => v === null || v === undefined || v === '').length,
   };
 }
