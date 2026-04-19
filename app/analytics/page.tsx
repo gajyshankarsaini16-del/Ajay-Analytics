@@ -138,7 +138,7 @@ function DataPreview({dsId,columns}:{dsId:string;columns:any[]}){
     try{
       const r=await fetch(`/api/datasets/${dsId}`);
       const d=await r.json();
-      Array.isArray(d.data)?d.data:(typeof d.data==='string'?JSON.parse(d.data):[]);
+      const parsed=Array.isArray(d.data)?d.data:(typeof d.data==='string'?JSON.parse(d.data||'[]'):[]);
       setAllRows(Array.isArray(parsed)?parsed:[]);
       setRows(Array.isArray(parsed)?parsed.slice(0,20):[]);
       setLoaded(true);
@@ -247,7 +247,7 @@ function RelationPanel({columns,dsId,onClose}:{columns:any[];dsId:string;onClose
       // Fetch raw data
       const r=await fetch(`/api/datasets/${dsId}`);
       const d=await r.json();
-      const rows:any[]=JSON.parse(d.data||'[]');
+      const rows:any[]=Array.isArray(d.data)?d.data:(typeof d.data==='string'?JSON.parse(d.data||'[]'):[]);
       const typeA=getType(colA),typeB=getType(colB);
       let chartData:any[]=[];
       let chartType='bar';
