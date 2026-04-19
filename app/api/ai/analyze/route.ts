@@ -1,13 +1,37 @@
 export const dynamic = 'force-dynamic';
 import { NextResponse } from 'next/server';
 
+// ── PRIMARY: Groq (Fast & Free) ──
+async function callGroq(system: string, user: string) {
+  const r = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${process.env.GROQ_API_KEY}`,
+    },
+    body: JSON.stringify({
+      model: 'llama-3.3-70b-versatile',
+      max_tokens: 800,
+      messages: [
+        { role: 'system', content: system },
+        { role: 'user', content: user }
+      ],
+    }),
+  });
+  if (!r.ok) throw new Error(`Groq API error: ${r.status}`);
+  const d = await r.json();
+  return d.choices?.[0]?.message?.content || '';
+}
+
+// ── FALLBACK 1: Gemini ──
 async function callGemini(prompt: string) {
   const { GoogleGenAI } = await import('@google/genai');
   const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || '' });
   const r = await ai.models.generateContent({ model: 'gemini-2.5-flash', contents: prompt });
-  return r.text;
+  return r.text || '';
 }
 
+// ── FALLBACK 2: Anthropic Claude ──
 async function callClaude(system: string, user: string) {
   const r = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
@@ -23,16 +47,31 @@ async function callClaude(system: string, user: string) {
       messages: [{ role: 'user', content: user }],
     }),
   });
-  if (!r.ok) throw new Error('Claude API failed');
+  if (!r.ok) throw new Error(`Claude API error: ${r.status}`);
   const d = await r.json();
   return d.content?.[0]?.text || '';
+}
+
+// ── Smart AI caller: tries Groq → Gemini → Claude ──
+async function callAI(system: string, prompt: string): Promise<string> {
+  // Try Groq first
+  if (process.env.GROQ_API_KEY) {
+    try { return await callGroq(system, prompt); } catch (e) { console.error('[Groq failed]', e); }
+  }
+  // Try Gemini second
+  if (process.env.GEMINI_API_KEY) {
+    try { return await callGemini(`${system}\n\n${prompt}`); } catch (e) { console.error('[Gemini failed]', e); }
+  }
+  // Try Claude last
+  if (process.env.ANTHROPIC_API_KEY) {
+    try { return await callClaude(system, prompt); } catch (e) { console.error('[Claude failed]', e); }
+  }
+  throw new Error('No AI API key configured. Add GROQ_API_KEY, GEMINI_API_KEY, or ANTHROPIC_API_KEY.');
 }
 
 export async function POST(request: Request) {
   try {
     const { context, type } = await request.json();
-    const useAnthropic = !!process.env.ANTHROPIC_API_KEY;
-
     let analysis = '';
 
     /* ── Question-level insight ── */
@@ -44,10 +83,7 @@ Total answers: ${context.totalAnswers}
 Top answers: ${JSON.stringify(context.chartData?.slice(0,5))}
 
 Write in simple English. Start with the key finding directly.`;
-
-      analysis = useAnthropic
-        ? await callClaude('You are a concise data analyst. Give specific, actionable insights in 2-3 sentences.', prompt)
-        : await callGemini(prompt);
+      analysis = await callAI('You are a concise data analyst. Give specific, actionable insights in 2-3 sentences.', prompt);
     }
 
     /* ── Column-level insight ── */
@@ -60,10 +96,7 @@ ${context.type === 'numeric'
   : `Unique values: ${context.uniqueCount}, Top values: ${JSON.stringify(context.topValues)}, Missing: ${context.missing}`}
 
 Be specific. Start directly with the insight.`;
-
-      analysis = useAnthropic
-        ? await callClaude('You are a concise data scientist. Give specific column-level insights in 2-3 sentences.', prompt)
-        : await callGemini(prompt);
+      analysis = await callAI('You are a concise data scientist. Give specific column-level insights in 2-3 sentences.', prompt);
     }
 
     /* ── Full form report ── */
@@ -80,10 +113,7 @@ Assess the completion rate and engagement quality.
 2-3 specific, actionable next steps based on the data.
 
 Form Data: ${JSON.stringify(context, null, 2)}`;
-
-      analysis = useAnthropic
-        ? await callClaude('You are a business intelligence analyst specializing in form data. Be specific, use actual numbers, format with markdown.', prompt)
-        : await callGemini(prompt);
+      analysis = await callAI('You are a business intelligence analyst specializing in form data. Be specific, use actual numbers, format with markdown.', prompt);
     }
 
     /* ── Dataset report ── */
@@ -103,10 +133,7 @@ Missing values, inconsistencies, issues.
 Top 3 actionable next steps based on this data.
 
 Dataset: ${JSON.stringify(context, null, 2)}`;
-
-      analysis = useAnthropic
-        ? await callClaude('You are a senior data scientist. Be specific, use actual numbers, format with markdown.', prompt)
-        : await callGemini(prompt);
+      analysis = await callAI('You are a senior data scientist. Be specific, use actual numbers, format with markdown.', prompt);
     }
 
     /* ── Overall platform ── */
@@ -123,33 +150,26 @@ Overall metrics assessment with specific numbers.
 3 prioritized action items.
 
 Platform Data: ${JSON.stringify(context, null, 2)}`;
-
-      analysis = useAnthropic
-        ? await callClaude('You are a C-level business intelligence advisor. Be concise and data-driven.', prompt)
-        : await callGemini(prompt);
+      analysis = await callAI('You are a C-level business intelligence advisor. Be concise and data-driven.', prompt);
     }
 
     /* ── Analytics summary ── */
     else if (type === 'analytics') {
       const prompt = `Analyze these platform metrics and give bullet-point insights:\n${JSON.stringify(context, null, 2)}`;
-      analysis = useAnthropic
-        ? await callClaude('You are an analytics consultant. Be concise and actionable.', prompt)
-        : await callGemini(prompt);
+      analysis = await callAI('You are an analytics consultant. Be concise and actionable.', prompt);
     }
 
     /* ── Report ── */
     else if (type === 'report') {
       const prompt = `Review this report data and provide a 2-3 paragraph professional summary with key takeaways as bullet points:\n${JSON.stringify(context, null, 2)}`;
-      analysis = useAnthropic
-        ? await callClaude('You are a business intelligence AI. Format professionally with markdown.', prompt)
-        : await callGemini(prompt);
+      analysis = await callAI('You are a business intelligence AI. Format professionally with markdown.', prompt);
     }
 
     /* ── Relation insight ── */
     else if (type === 'relation_insight') {
       const c = context;
-      const relType = c.typeA==='numeric'&&c.typeB==='numeric' ? 'Numerical correlation (Pearson r)' 
-                    : c.typeA==='categorical'&&c.typeB==='categorical' ? 'Categorical frequency distribution' 
+      const relType = c.typeA==='numeric'&&c.typeB==='numeric' ? 'Numerical correlation (Pearson r)'
+                    : c.typeA==='categorical'&&c.typeB==='categorical' ? 'Categorical frequency distribution'
                     : 'Category vs Numeric aggregation';
       const prompt = `You are a senior business data analyst. Analyze the relationship between "${c.colA}" (${c.typeA}) and "${c.colB}" (${c.typeB}).
 
@@ -170,35 +190,17 @@ Output EXACTLY 5-6 bullet points. Rules:
 - Be actionable and business-focused
 - Max 25 words per bullet
 - No headings, no extra explanation`;
-
-      analysis = useAnthropic
-        ? await callClaude('You are a concise data analyst. Output ONLY bullet points starting with "- ". No headers. No preamble.', prompt)
-        : await callGemini(prompt);
+      analysis = await callAI('You are a concise data analyst. Output ONLY bullet points starting with "- ". No headers. No preamble.', prompt);
     }
 
     else {
       const prompt = `Analyze this data and provide professional insights: ${JSON.stringify(context)}`;
-      analysis = useAnthropic
-        ? await callClaude('You are a data expert.', prompt)
-        : await callGemini(prompt);
+      analysis = await callAI('You are a data expert.', prompt);
     }
 
     return NextResponse.json({ analysis });
   } catch (error: any) {
     console.error('[AI Analyze Error]', error);
-    // Fallback to Gemini if Claude fails
-    try {
-      if (process.env.GEMINI_API_KEY) {
-        const { context, type } = await request.clone().json();
-        const { GoogleGenAI } = await import('@google/genai');
-        const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
-        const r = await ai.models.generateContent({
-          model: 'gemini-2.5-flash',
-          contents: `Analyze this ${type} data and give insights: ${JSON.stringify(context)}`
-        });
-        return NextResponse.json({ analysis: r.text });
-      }
-    } catch {}
     return NextResponse.json({ error: error.message || 'AI analysis failed' }, { status: 500 });
   }
 }
