@@ -9,7 +9,6 @@ export async function POST(request: Request) {
 
     let dataContext = '';
 
-    // Load dataset context
     if (datasetId) {
       const ds = await prisma.dataset.findUnique({ where: { id: datasetId } });
       if (ds) {
@@ -34,7 +33,6 @@ export async function POST(request: Request) {
       }
     }
 
-    // Load form context
     if (formId) {
       const form = await prisma.form.findUnique({
         where: { id: formId },
@@ -53,7 +51,6 @@ export async function POST(request: Request) {
       }
     }
 
-    // Use pre-loaded context if provided
     if (context && !dataContext) {
       dataContext = `Current data context:\n${JSON.stringify(context, null, 2)}`;
     }
@@ -71,7 +68,6 @@ Guidelines:
 - If the question can't be answered from the data, say so clearly
 - Use simple language, mix Hindi-English if needed`;
 
-    // Build conversation history
     const messages = [
       ...(history || []).map((h: any) => ({ role: h.role, content: h.content })),
       { role: 'user', content: question }
@@ -79,23 +75,48 @@ Guidelines:
 
     let answer = '';
 
-    if (process.env.ANTHROPIC_API_KEY) {
-      const r = await fetch('https://api.anthropic.com/v1/messages', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'x-api-key': process.env.ANTHROPIC_API_KEY, 'anthropic-version': '2023-06-01' },
-        body: JSON.stringify({ model: 'claude-sonnet-4-5', max_tokens: 600, system: systemPrompt, messages })
-      });
-      const d = await r.json();
-      answer = d.content?.[0]?.text || 'Sorry, could not generate response.';
-    } else if (process.env.GEMINI_API_KEY) {
-      const { GoogleGenAI } = await import('@google/genai');
-      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
-      const fullPrompt = `${systemPrompt}\n\nConversation:\n${messages.map(m => `${m.role}: ${m.content}`).join('\n')}\n\nassistant:`;
-      const rr = await ai.models.generateContent({ model: 'gemini-2.5-flash', contents: fullPrompt });
-      answer = rr.text || '';
-    } else {
-      answer = 'No AI API key configured.';
+    // Try Groq first
+    if (process.env.GROQ_API_KEY) {
+      try {
+        const r = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${process.env.GROQ_API_KEY}` },
+          body: JSON.stringify({ model: 'llama-3.3-70b-versatile', max_tokens: 600, messages: [{ role: 'system', content: systemPrompt }, ...messages] })
+        });
+        if (r.ok) {
+          const d = await r.json();
+          answer = d.choices?.[0]?.message?.content || '';
+        } else { throw new Error(`Groq error: ${r.status}`); }
+      } catch (e) { console.error('[Chat Groq failed]', e); }
     }
+
+    // Fallback to Gemini
+    if (!answer && process.env.GEMINI_API_KEY) {
+      try {
+        const { GoogleGenAI } = await import('@google/genai');
+        const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+        const fullPrompt = `${systemPrompt}\n\nConversation:\n${messages.map((m: any) => `${m.role}: ${m.content}`).join('\n')}\n\nassistant:`;
+        const rr = await ai.models.generateContent({ model: 'gemini-2.5-flash', contents: fullPrompt });
+        answer = rr.text || '';
+      } catch (e) { console.error('[Chat Gemini failed]', e); }
+    }
+
+    // Fallback to Claude
+    if (!answer && process.env.ANTHROPIC_API_KEY) {
+      try {
+        const r = await fetch('https://api.anthropic.com/v1/messages', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'x-api-key': process.env.ANTHROPIC_API_KEY, 'anthropic-version': '2023-06-01' },
+          body: JSON.stringify({ model: 'claude-sonnet-4-5', max_tokens: 600, system: systemPrompt, messages })
+        });
+        if (r.ok) {
+          const d = await r.json();
+          answer = d.content?.[0]?.text || '';
+        }
+      } catch (e) { console.error('[Chat Claude failed]', e); }
+    }
+
+    if (!answer) answer = 'No AI API key configured or all APIs failed.';
 
     return NextResponse.json({ answer });
   } catch (err: any) {
