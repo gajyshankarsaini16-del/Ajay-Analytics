@@ -138,7 +138,7 @@ function DataPreview({dsId,columns}:{dsId:string;columns:any[]}){
     try{
       const r=await fetch(`/api/datasets/${dsId}`);
       const d=await r.json();
-      const parsed=JSON.parse(d.data||'[]');
+      Array.isArray(d.data)?d.data:(typeof d.data==='string'?JSON.parse(d.data):[]);
       setAllRows(Array.isArray(parsed)?parsed:[]);
       setRows(Array.isArray(parsed)?parsed.slice(0,20):[]);
       setLoaded(true);
