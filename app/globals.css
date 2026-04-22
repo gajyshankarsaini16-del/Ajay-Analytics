@@ -52,7 +52,7 @@ body {
   background-color: var(--bg-color);
   color: var(--text-primary);
   min-height: 100vh;
-  display: flex;
+  width: 100%;
   overflow-x: hidden;
   scroll-behavior: smooth;
 }
