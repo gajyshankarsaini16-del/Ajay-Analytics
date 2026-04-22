@@ -1,10 +1,10 @@
 .layout {
   display: flex;
   min-height: 100vh;
-  background-color: var(--bg-color);
+  background-color: #F9FAFB;
   background-image: 
-    radial-gradient(ellipse at top left, rgba(99, 102, 241, 0.12), transparent 40%),
-    radial-gradient(ellipse at bottom right, rgba(236, 72, 153, 0.12), transparent 40%);
+    radial-gradient(ellipse at top left, rgba(37, 99, 235, 0.05), transparent 40%),
+    radial-gradient(ellipse at bottom right, rgba(34, 197, 94, 0.05), transparent 40%);
   background-attachment: fixed;
 }
 
@@ -15,6 +15,7 @@
   padding: 2rem;
   margin-left: 260px;
   transition: margin-left 0.3s ease;
+  background: #F9FAFB;
 }
 
 .contentWrapper {
@@ -33,6 +34,6 @@
   .main {
     margin-left: 0 !important;
     padding: 1rem !important;
-    padding-top: 5rem !important; /* Space for the mobile toggle */
+    padding-top: 5rem !important;
   }
 }
