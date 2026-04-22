@@ -120,17 +120,18 @@ export default function Dashboard() {
             {isMounted && (
               <ResponsiveContainer width="100%" height={300}>
                 <LineChart data={data?.chartData || []}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" vertical={false} />
-                  <XAxis dataKey="date" stroke="#94a3b8" tick={{fill: '#94a3b8'}} axisLine={false} tickLine={false} />
-                  <YAxis stroke="#94a3b8" tick={{fill: '#94a3b8'}} axisLine={false} tickLine={false} allowDecimals={false} />
+                  <CartesianGrid strokeDasharray="3 3" stroke="#F3F4F6" vertical={false} />
+                  <XAxis dataKey="date" stroke="#D1D5DB" tick={{fill: '#9CA3AF'}} axisLine={false} tickLine={false} />
+                  <YAxis stroke="#D1D5DB" tick={{fill: '#9CA3AF'}} axisLine={false} tickLine={false} allowDecimals={false} />
                   <Tooltip 
-                    contentStyle={{ backgroundColor: '#1e293b', border: '1px solid #334155', borderRadius: '8px' }}
-                    itemStyle={{ color: '#f8fafc' }}
+                    contentStyle={{ backgroundColor: '#FFFFFF', border: '1px solid #E5E7EB', borderRadius: '10px', boxShadow: '0 4px 16px rgba(0,0,0,0.1)', color: '#111827' }}
+                    itemStyle={{ color: '#111827', fontWeight: 600 }}
+                    labelStyle={{ color: '#6B7280', fontSize: '0.78rem' }}
                   />
                   <Line 
                     type="monotone" 
                     dataKey="events" 
-                    stroke="#6366f1" 
+                    stroke="#2563EB" 
                     strokeWidth={3}
                     activeDot={{ r: 8 }}
                     animationDuration={300}
