@@ -17,21 +17,21 @@ import {
 } from 'lucide-react';
 
 const T = {
-  bg:'#0a0e1a',surface:'#111827',card:'#151e2d',
-  border:'rgba(255,255,255,0.07)',accent:'#2563eb',
-  accent2:'#7c3aed',green:'#10b981',amber:'#f59e0b',
-  red:'#ef4444',cyan:'#06b6d4',pink:'#ec4899',
-  text:'#f1f5f9',muted:'rgba(241,245,249,0.45)',
-  dimmed:'rgba(241,245,249,0.2)',
+  bg:'#F9FAFB',surface:'#FFFFFF',card:'#FFFFFF',
+  border:'#E5E7EB',accent:'#2563EB',
+  accent2:'#7C3AED',green:'#22C55E',amber:'#F59E0B',
+  red:'#EF4444',cyan:'#06B6D4',pink:'#EC4899',
+  text:'#111827',muted:'#6B7280',
+  dimmed:'#9CA3AF',
 };
-const CC = ['#2563eb','#7c3aed','#10b981','#f59e0b','#ec4899','#06b6d4','#f97316','#84cc16'];
+const CC = ['#2563EB','#7C3AED','#22C55E','#F59E0B','#EC4899','#06B6D4','#F97316','#84CC16'];
 const UNIQUE_LIMIT = 20;
 
-const Card=({children,style,id}:any)=><div id={id} style={{background:T.card,border:`1px solid ${T.border}`,borderRadius:16,padding:'1.5rem',...style}}>{children}</div>;
+const Card=({children,style,id}:any)=><div id={id} style={{background:T.card,border:`1px solid ${T.border}`,borderRadius:16,padding:'1.5rem',boxShadow:'0 1px 4px rgba(0,0,0,0.06)',...style}}>{children}</div>;
 const Chip=({label,color=T.accent}:any)=><span style={{display:'inline-flex',alignItems:'center',padding:'3px 10px',borderRadius:20,fontSize:'0.72rem',fontWeight:600,background:`${color}22`,border:`1px solid ${color}44`,color,letterSpacing:'0.04em'}}>{label}</span>;
 
 const KPI=({label,value,delta,color=T.accent,icon:Icon}:any)=>(
-  <div style={{background:`linear-gradient(135deg,${T.card},${T.surface})`,border:`1px solid ${T.border}`,borderRadius:14,padding:'1.25rem 1.5rem',position:'relative',overflow:'hidden'}}>
+  <div style={{background:`#FFFFFF`,border:`1px solid ${T.border}`,borderRadius:14,padding:'1.25rem 1.5rem',position:'relative',overflow:'hidden',boxShadow:'0 1px 4px rgba(0,0,0,0.06)'}}>
     <div style={{position:'absolute',top:0,right:0,width:80,height:80,background:`radial-gradient(circle at 80% 20%,${color}18,transparent 70%)`,pointerEvents:'none'}}/>
     <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:10}}>
       <p style={{margin:0,fontSize:'0.72rem',color:T.muted,textTransform:'uppercase',letterSpacing:'0.08em'}}>{label}</p>
@@ -47,8 +47,8 @@ const KPI=({label,value,delta,color=T.accent,icon:Icon}:any)=>(
 
 const TT=({active,payload,label}:any)=>{
   if(!active||!payload?.length)return null;
-  return <div style={{background:'#1e2a3a',border:`1px solid ${T.border}`,borderRadius:10,padding:'10px 14px',fontSize:'0.82rem',boxShadow:'0 8px 32px rgba(0,0,0,0.4)'}}>
-    <p style={{margin:'0 0 6px',color:T.muted,fontWeight:600}}>{label}</p>
+  return <div style={{background:'#FFFFFF',border:`1px solid ${T.border}`,borderRadius:10,padding:'10px 14px',fontSize:'0.82rem',boxShadow:'0 4px 16px rgba(0,0,0,0.12)'}}>
+    <p style={{margin:'0 0 6px',color:T.muted,fontWeight:600,fontSize:'0.78rem'}}>{label}</p>
     {payload.map((p:any,i:number)=><p key={i} style={{margin:'2px 0',color:p.color||T.text}}>{p.name}: <strong>{p.value}</strong></p>)}
   </div>;
 };
@@ -325,11 +325,11 @@ function RelationPanel({columns,dsId,onClose}:{columns:any[];dsId:string;onClose
     'Categorical ↔ Numerical (Group Average)';
 
   return(
-    <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.7)',zIndex:999,display:'flex',alignItems:'center',justifyContent:'center',padding:'1rem'}}
+    <div style={{position:'fixed',inset:0,background:'rgba(17,24,39,0.5)',zIndex:999,display:'flex',alignItems:'center',justifyContent:'center',padding:'1rem'}}
       onClick={e=>{if(e.target===e.currentTarget)onClose();}}>
-      <div style={{width:'100%',maxWidth:900,maxHeight:'90vh',overflowY:'auto',background:T.surface,borderRadius:20,border:`1px solid ${T.border}`,boxShadow:'0 24px 80px rgba(0,0,0,0.6)'}}>
+      <div style={{width:'100%',maxWidth:900,maxHeight:'90vh',overflowY:'auto',background:'#FFFFFF',borderRadius:20,border:`1px solid ${T.border}`,boxShadow:'0 24px 80px rgba(0,0,0,0.6)'}}>
         {/* Header */}
-        <div style={{padding:'1.25rem 1.5rem',borderBottom:`1px solid ${T.border}`,display:'flex',alignItems:'center',justifyContent:'space-between',background:`linear-gradient(135deg,#0f1f3d,#1a1040)`}}>
+        <div style={{padding:'1.25rem 1.5rem',borderBottom:`1px solid ${T.border}`,display:'flex',alignItems:'center',justifyContent:'space-between',background:`linear-gradient(135deg,#EFF6FF,#F5F3FF)`}}>
           <div style={{display:'flex',alignItems:'center',gap:10}}>
             <div style={{padding:8,borderRadius:10,background:`linear-gradient(135deg,${T.accent},${T.accent2})`}}><GitBranch size={16} color="#fff"/></div>
             <div>
@@ -460,7 +460,7 @@ function RelationPanel({columns,dsId,onClose}:{columns:any[];dsId:string;onClose
 
               {/* AI Bullet Insights */}
               {result.bullets.length>0&&(
-                <div style={{padding:'1.25rem',background:'linear-gradient(135deg,#0f1f3d,#1a1040)',border:`1px solid ${T.accent}33`,borderRadius:14}}>
+                <div style={{padding:'1.25rem',background:'linear-gradient(135deg,#EFF6FF,#F0FDF4)',border:`1px solid ${T.accent}33`,borderRadius:14}}>
                   <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:'0.9rem'}}>
                     <div style={{padding:6,borderRadius:8,background:`${T.accent}22`}}><Lightbulb size={14} color={T.accent}/></div>
                     <p style={{margin:0,fontSize:'0.82rem',fontWeight:700,color:T.accent,textTransform:'uppercase',letterSpacing:'0.08em'}}>Key Insights</p>
@@ -497,7 +497,7 @@ function QInsight({q,totalSubmissions}:{q:any;totalSubmissions:number}){
   },[q?.fieldId]);
   if(!q?.totalAnswers)return null;
   return(
-    <div style={{marginTop:'0.85rem',padding:'0.85rem 1rem',background:'linear-gradient(135deg,#0d1829,#120d24)',border:`1px solid ${T.accent}22`,borderRadius:10,display:'flex',gap:10,alignItems:'flex-start'}}>
+    <div style={{marginTop:'0.85rem',padding:'0.85rem 1rem',background:'linear-gradient(135deg,#EFF6FF,#F9FAFB)',border:`1px solid ${T.accent}22`,borderRadius:10,display:'flex',gap:10,alignItems:'flex-start'}}>
       <div style={{padding:5,borderRadius:6,background:`${T.accent}18`,flexShrink:0,marginTop:1}}>
         {load?<Loader2 size={12} color={T.accent} style={{animation:'spin 1s linear infinite'}}/>:<Lightbulb size={12} color={T.accent}/>}
       </div>
@@ -539,7 +539,7 @@ function ColInsight({col}:{col:any}){
     }).catch(()=>{}).finally(()=>setLoad(false));
   },[col.name]);
   return(
-    <div style={{marginTop:'0.85rem',padding:'0.85rem 1rem',background:'linear-gradient(135deg,#0d1829,#120d24)',border:`1px solid ${T.green}22`,borderRadius:10}}>
+    <div style={{marginTop:'0.85rem',padding:'0.85rem 1rem',background:'linear-gradient(135deg,#EFF6FF,#F9FAFB)',border:`1px solid ${T.green}22`,borderRadius:10}}>
       <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:'0.6rem'}}>
         <div style={{padding:5,borderRadius:6,background:`${T.green}18`,flexShrink:0}}>
           {load?<Loader2 size={12} color={T.green} style={{animation:'spin 1s linear infinite'}}/>:<Lightbulb size={12} color={T.green}/>}
@@ -563,7 +563,7 @@ function ColInsight({col}:{col:any}){
 function InsightsBox({insights,loading,onDownload,downloading}:{insights:string[];loading:boolean;onDownload:()=>void;downloading:boolean}){
   if(!insights.length&&!loading)return null;
   return(
-    <Card style={{background:'linear-gradient(135deg,#0f1f3d,#1a1040)',border:`1px solid ${T.accent}33`}}>
+    <Card style={{background:'linear-gradient(135deg,#EFF6FF,#F0FDF4)',border:`1px solid ${T.accent}33`}}>
       <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:'1rem',flexWrap:'wrap',gap:8}}>
         <div style={{display:'flex',alignItems:'center',gap:8}}>
           <div style={{padding:6,borderRadius:8,background:`${T.accent}22`}}><Lightbulb size={15} color={T.accent}/></div>
@@ -599,7 +599,7 @@ async function dlReport(title:string,insights:string[],el:HTMLElement|null){
   const pw=pdf.internal.pageSize.getWidth();
   const ph=pdf.internal.pageSize.getHeight();
   const m=15; let y=m;
-  pdf.setFillColor(255,255,255); pdf.rect(0,0,pw,ph,'F');
+  pdf.setFillColor(249,250,251); pdf.rect(0,0,pw,ph,'F');
   pdf.setFillColor(37,99,235); pdf.roundedRect(0,0,pw,26,0,0,'F');
   pdf.setTextColor(255,255,255); pdf.setFontSize(14); pdf.setFont('helvetica','bold');
   pdf.text('Analytics Report',m,17);
@@ -667,8 +667,8 @@ function ChatPanel({isOpen,onClose,ctx,dtype,did}:any){
   const sugg=['Key trends?','Top patterns?','Any anomalies?','3 recommendations'];
   if(!isOpen)return null;
   return(
-    <div style={{position:'fixed',right:0,top:0,bottom:0,width:400,background:T.surface,borderLeft:`1px solid ${T.border}`,display:'flex',flexDirection:'column',zIndex:1000,boxShadow:'-8px 0 40px rgba(0,0,0,0.5)'}}>
-      <div style={{padding:'1rem 1.25rem',borderBottom:`1px solid ${T.border}`,display:'flex',alignItems:'center',justifyContent:'space-between',background:`linear-gradient(135deg,${T.card},${T.surface})`}}>
+    <div style={{position:'fixed',right:0,top:0,bottom:0,width:400,background:'#FFFFFF',borderLeft:`1px solid ${T.border}`,display:'flex',flexDirection:'column',zIndex:1000,boxShadow:'-8px 0 40px rgba(0,0,0,0.5)'}}>
+      <div style={{padding:'1rem 1.25rem',borderBottom:`1px solid ${T.border}`,display:'flex',alignItems:'center',justifyContent:'space-between',background:`#FFFFFF`}}>
         <div style={{display:'flex',alignItems:'center',gap:10}}>
           <div style={{width:36,height:36,borderRadius:10,background:`linear-gradient(135deg,${T.accent},${T.accent2})`,display:'flex',alignItems:'center',justifyContent:'center'}}><Bot size={18} color="#fff"/></div>
           <div><p style={{margin:0,fontSize:'0.9rem',fontWeight:700,color:T.text}}>Analytics Copilot</p><p style={{margin:0,fontSize:'0.7rem',color:T.green}}>● AI Active</p></div>
@@ -681,7 +681,7 @@ function ChatPanel({isOpen,onClose,ctx,dtype,did}:any){
             <div style={{width:28,height:28,borderRadius:8,flexShrink:0,background:m.role==='ai'?`linear-gradient(135deg,${T.accent},${T.accent2})`:T.card,border:m.role==='user'?`1px solid ${T.border}`:'none',display:'flex',alignItems:'center',justifyContent:'center'}}>
               {m.role==='ai'?<Bot size={14} color="#fff"/>:<User size={14} color={T.muted}/>}
             </div>
-            <div style={{maxWidth:'80%',padding:'10px 14px',borderRadius:m.role==='ai'?'4px 14px 14px 14px':'14px 4px 14px 14px',background:m.role==='ai'?T.card:`linear-gradient(135deg,${T.accent}cc,${T.accent2}cc)`,border:`1px solid ${m.role==='ai'?T.border:'transparent'}`,fontSize:'0.85rem',color:T.text,lineHeight:1.65,whiteSpace:'pre-wrap'}}>
+            <div style={{maxWidth:'80%',padding:'10px 14px',borderRadius:m.role==='ai'?'4px 14px 14px 14px':'14px 4px 14px 14px',background:m.role==='ai'?'#F9FAFB':`linear-gradient(135deg,${T.accent},${T.accent2})`,border:`1px solid ${m.role==='ai'?T.border:'transparent'}`,fontSize:'0.85rem',color:T.text,lineHeight:1.65,whiteSpace:'pre-wrap'}}>
               {m.text}
             </div>
           </div>
@@ -1046,8 +1046,8 @@ export default function AnalyticsPage(){
       </div>
       <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(280px,1fr))',gap:'1.5rem'}}>
         {[
-          {type:'form' as MV,title:'Form Analytics',desc:'Analyze form responses with smart charts and AI insights',icon:ClipboardList,grad:'linear-gradient(135deg,#0f1f3d,#1a1040)',bord:`${T.accent}33`,ibg:`linear-gradient(135deg,${T.accent},${T.accent2})`,chips:[{l:'Analysis',c:T.accent},{l:'Report',c:T.accent2}]},
-          {type:'upload' as MV,title:'Upload File',desc:'Deep-dive into datasets with column stats, relation analysis & AI',icon:Upload,grad:'linear-gradient(135deg,#0f2d1f,#1a2a10)',bord:`${T.green}33`,ibg:`linear-gradient(135deg,${T.green},${T.cyan})`,chips:[{l:'Dataset Analytics',c:T.green},{l:'Relation Analysis',c:T.accent2},{l:'AI Copilot',c:T.cyan}]},
+          {type:'form' as MV,title:'Form Analytics',desc:'Analyze form responses with smart charts and AI insights',icon:ClipboardList,grad:'linear-gradient(135deg,#EFF6FF,#F5F3FF)',bord:`${T.accent}33`,ibg:`linear-gradient(135deg,${T.accent},${T.accent2})`,chips:[{l:'Analysis',c:T.accent},{l:'Report',c:T.accent2}]},
+          {type:'upload' as MV,title:'Upload File',desc:'Deep-dive into datasets with column stats, relation analysis & AI',icon:Upload,grad:'linear-gradient(135deg,#F0FDF4,#ECFDF5)',bord:`${T.green}33`,ibg:`linear-gradient(135deg,${T.green},${T.cyan})`,chips:[{l:'Dataset Analytics',c:T.green},{l:'Relation Analysis',c:T.accent2},{l:'AI Copilot',c:T.cyan}]},
         ].map(({type,title,desc,icon:Icon,grad,bord,ibg,chips})=>(
           <button key={type} onClick={()=>setView(type)} style={{background:grad,border:`1px solid ${bord}`,borderRadius:20,padding:'2rem',cursor:'pointer',textAlign:'left',transition:'all 0.2s'}}
             onMouseEnter={e=>{(e.currentTarget as HTMLElement).style.transform='translateY(-3px)';(e.currentTarget as HTMLElement).style.boxShadow='0 12px 40px rgba(0,0,0,0.3)';}}
