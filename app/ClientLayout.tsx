@@ -25,7 +25,7 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
   // No sidebar for public form and login page
   if (isPublicForm || isLoginPage) {
     return (
-      <main style={{ minHeight: '100vh', overflowY: 'auto', background: '#F9FAFB' }}>
+      <main style={{ minHeight: '100vh', overflowY: 'auto', background: isLoginPage ? '#0a0a12' : '#F9FAFB' }}>
         {children as React.ReactNode}
       </main>
     );
