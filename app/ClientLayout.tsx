@@ -18,14 +18,14 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
 
   if (!mounted) {
     return (
-      <main style={{ minHeight: '100vh', background: '#0f172a' }}></main>
+      <main style={{ minHeight: '100vh', background: '#F9FAFB' }}></main>
     );
   }
 
   // No sidebar for public form and login page
   if (isPublicForm || isLoginPage) {
     return (
-      <main style={{ minHeight: '100vh', overflowY: 'auto' }}>
+      <main style={{ minHeight: '100vh', overflowY: 'auto', background: '#F9FAFB' }}>
         {children as React.ReactNode}
       </main>
     );
