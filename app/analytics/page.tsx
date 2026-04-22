@@ -49,7 +49,7 @@ const TT=({active,payload,label}:any)=>{
   if(!active||!payload?.length)return null;
   return <div style={{background:'#FFFFFF',border:`1px solid ${T.border}`,borderRadius:10,padding:'10px 14px',fontSize:'0.82rem',boxShadow:'0 4px 16px rgba(0,0,0,0.12)'}}>
     <p style={{margin:'0 0 6px',color:T.muted,fontWeight:600,fontSize:'0.78rem'}}>{label}</p>
-    {payload.map((p:any,i:number)=><p key={i} style={{margin:'2px 0',color:p.color||T.text}}>{p.name}: <strong>{p.value}</strong></p>)}
+    {payload.map((p:any,i:number)=><p key={i} style={{margin:'2px 0',color:p.color||'#2563EB',fontWeight:600}}>{p.name}: <strong style={{color:T.text}}>{p.value}</strong></p>)}
   </div>;
 };
 
@@ -469,7 +469,7 @@ function RelationPanel({columns,dsId,onClose}:{columns:any[];dsId:string;onClose
                     {result.bullets.map((b:string,i:number)=>(
                       <div key={i} style={{display:'flex',gap:10,alignItems:'flex-start'}}>
                         <div style={{width:20,height:20,borderRadius:6,background:`${CC[i%CC.length]}22`,border:`1px solid ${CC[i%CC.length]}44`,display:'flex',alignItems:'center',justifyContent:'center',fontSize:'0.65rem',fontWeight:800,color:CC[i%CC.length],flexShrink:0,marginTop:1}}>{i+1}</div>
-                        <p style={{margin:0,fontSize:'0.85rem',color:'rgba(241,245,249,0.85)',lineHeight:1.65}}>{b}</p>
+                        <p style={{margin:0,fontSize:'0.85rem',color:'#374151',lineHeight:1.65}}>{b}</p>
                       </div>
                     ))}
                   </div>
@@ -503,7 +503,7 @@ function QInsight({q,totalSubmissions}:{q:any;totalSubmissions:number}){
       </div>
       <div>
         <p style={{margin:'0 0 3px',fontSize:'0.68rem',color:T.accent,fontWeight:700,textTransform:'uppercase',letterSpacing:'0.06em'}}>AI Insight</p>
-        <p style={{margin:0,fontSize:'0.82rem',color:'rgba(241,245,249,0.8)',lineHeight:1.6}}>{load?'Generating insight…':(txt||'No insight available.')}</p>
+        <p style={{margin:0,fontSize:'0.82rem',color:'#374151',lineHeight:1.6}}>{load?'Generating insight…':(txt||'No insight available.')}</p>
       </div>
     </div>
   );
@@ -544,17 +544,17 @@ function ColInsight({col}:{col:any}){
         <div style={{padding:5,borderRadius:6,background:`${T.green}18`,flexShrink:0}}>
           {load?<Loader2 size={12} color={T.green} style={{animation:'spin 1s linear infinite'}}/>:<Lightbulb size={12} color={T.green}/>}
         </div>
-        <p style={{margin:0,fontSize:'0.68rem',color:T.green,fontWeight:700,textTransform:'uppercase',letterSpacing:'0.06em'}}>Column Insight</p>
+        <p style={{margin:0,fontSize:'0.68rem',color:'#16A34A',fontWeight:700,textTransform:'uppercase',letterSpacing:'0.06em'}}>Column Insight</p>
       </div>
-      {load&&<p style={{margin:0,fontSize:'0.82rem',color:'rgba(241,245,249,0.5)',paddingLeft:'0.25rem'}}>Analyzing…</p>}
+      {load&&<p style={{margin:0,fontSize:'0.82rem',color:'#9CA3AF',paddingLeft:'0.25rem'}}>Analyzing…</p>}
       {!load&&bullets.length>0&&(
         <ul style={{margin:0,padding:'0 0 0 1.1rem',display:'flex',flexDirection:'column',gap:'0.3rem'}}>
           {bullets.map((b,i)=>(
-            <li key={i} style={{fontSize:'0.82rem',color:'rgba(241,245,249,0.82)',lineHeight:1.55,paddingLeft:'0.2rem'}}>{b}</li>
+            <li key={i} style={{fontSize:'0.82rem',color:'#374151',lineHeight:1.55,paddingLeft:'0.2rem'}}>{b}</li>
           ))}
         </ul>
       )}
-      {!load&&bullets.length===0&&<p style={{margin:0,fontSize:'0.82rem',color:'rgba(241,245,249,0.4)',paddingLeft:'0.25rem'}}>No insight available.</p>}
+      {!load&&bullets.length===0&&<p style={{margin:0,fontSize:'0.82rem',color:'#9CA3AF',paddingLeft:'0.25rem'}}>No insight available.</p>}
     </div>
   );
 }
@@ -583,7 +583,7 @@ function InsightsBox({insights,loading,onDownload,downloading}:{insights:string[
         {insights.map((ins,i)=>(
           <div key={i} style={{display:'flex',gap:10,alignItems:'flex-start'}}>
             <div style={{width:20,height:20,borderRadius:6,background:`${CC[i%CC.length]}22`,border:`1px solid ${CC[i%CC.length]}44`,display:'flex',alignItems:'center',justifyContent:'center',fontSize:'0.65rem',fontWeight:800,color:CC[i%CC.length],flexShrink:0,marginTop:1}}>{String(i+1).padStart(2,'0')}</div>
-            <p style={{margin:0,fontSize:'0.85rem',color:'rgba(241,245,249,0.85)',lineHeight:1.6}}>{ins}</p>
+            <p style={{margin:0,fontSize:'0.85rem',color:'#374151',lineHeight:1.6}}>{ins}</p>
           </div>
         ))}
       </div>}
@@ -681,7 +681,7 @@ function ChatPanel({isOpen,onClose,ctx,dtype,did}:any){
             <div style={{width:28,height:28,borderRadius:8,flexShrink:0,background:m.role==='ai'?`linear-gradient(135deg,${T.accent},${T.accent2})`:T.card,border:m.role==='user'?`1px solid ${T.border}`:'none',display:'flex',alignItems:'center',justifyContent:'center'}}>
               {m.role==='ai'?<Bot size={14} color="#fff"/>:<User size={14} color={T.muted}/>}
             </div>
-            <div style={{maxWidth:'80%',padding:'10px 14px',borderRadius:m.role==='ai'?'4px 14px 14px 14px':'14px 4px 14px 14px',background:m.role==='ai'?'#F9FAFB':`linear-gradient(135deg,${T.accent},${T.accent2})`,border:`1px solid ${m.role==='ai'?T.border:'transparent'}`,fontSize:'0.85rem',color:T.text,lineHeight:1.65,whiteSpace:'pre-wrap'}}>
+            <div style={{maxWidth:'80%',padding:'10px 14px',borderRadius:m.role==='ai'?'4px 14px 14px 14px':'14px 4px 14px 14px',background:m.role==='ai'?'#F9FAFB':`linear-gradient(135deg,${T.accent},${T.accent2})`,border:`1px solid ${m.role==='ai'?T.border:'transparent'}`,fontSize:'0.85rem',color:m.role==='user'?'#FFFFFF':T.text,lineHeight:1.65,whiteSpace:'pre-wrap'}}>
               {m.text}
             </div>
           </div>
@@ -1046,8 +1046,8 @@ export default function AnalyticsPage(){
       </div>
       <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(280px,1fr))',gap:'1.5rem'}}>
         {[
-          {type:'form' as MV,title:'Form Analytics',desc:'Analyze form responses with smart charts and AI insights',icon:ClipboardList,grad:'linear-gradient(135deg,#EFF6FF,#F5F3FF)',bord:`${T.accent}33`,ibg:`linear-gradient(135deg,${T.accent},${T.accent2})`,chips:[{l:'Analysis',c:T.accent},{l:'Report',c:T.accent2}]},
-          {type:'upload' as MV,title:'Upload File',desc:'Deep-dive into datasets with column stats, relation analysis & AI',icon:Upload,grad:'linear-gradient(135deg,#F0FDF4,#ECFDF5)',bord:`${T.green}33`,ibg:`linear-gradient(135deg,${T.green},${T.cyan})`,chips:[{l:'Dataset Analytics',c:T.green},{l:'Relation Analysis',c:T.accent2},{l:'AI Copilot',c:T.cyan}]},
+          {type:'form' as MV,title:'Form Analytics',desc:'Analyze form responses with smart charts and AI insights',icon:ClipboardList,grad:'linear-gradient(135deg,#EFF6FF,#F5F3FF)',bord:'#BFDBFE',ibg:`linear-gradient(135deg,${T.accent},${T.accent2})`,chips:[{l:'Analysis',c:T.accent},{l:'Report',c:T.accent2}]},
+          {type:'upload' as MV,title:'Upload File',desc:'Deep-dive into datasets with column stats, relation analysis & AI',icon:Upload,grad:'linear-gradient(135deg,#F0FDF4,#ECFDF5)',bord:'#BBF7D0',ibg:`linear-gradient(135deg,${T.green},${T.cyan})`,chips:[{l:'Dataset Analytics',c:T.green},{l:'Relation Analysis',c:T.accent2},{l:'AI Copilot',c:T.cyan}]},
         ].map(({type,title,desc,icon:Icon,grad,bord,ibg,chips})=>(
           <button key={type} onClick={()=>setView(type)} style={{background:grad,border:`1px solid ${bord}`,borderRadius:20,padding:'2rem',cursor:'pointer',textAlign:'left',transition:'all 0.2s'}}
             onMouseEnter={e=>{(e.currentTarget as HTMLElement).style.transform='translateY(-3px)';(e.currentTarget as HTMLElement).style.boxShadow='0 12px 40px rgba(0,0,0,0.3)';}}
