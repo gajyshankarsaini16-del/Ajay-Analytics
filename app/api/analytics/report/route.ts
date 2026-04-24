@@ -1,23 +1,28 @@
 export const dynamic = 'force-dynamic';
+export const maxDuration = 60;
 import { NextResponse } from 'next/server';
 
 // ── Smart AI caller (same pattern as your existing analyze/route.ts) ──
 async function callGroq(system: string, user: string) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 50000);
   const r = await fetch('https://api.groq.com/openai/v1/chat/completions', {
     method: 'POST',
+    signal: controller.signal,
     headers: {
       'Content-Type': 'application/json',
       'Authorization': `Bearer ${process.env.GROQ_API_KEY}`,
     },
     body: JSON.stringify({
       model: 'llama-3.3-70b-versatile',
-      max_tokens: 2000,
+      max_tokens: 1500,
       messages: [
         { role: 'system', content: system },
         { role: 'user', content: user },
       ],
     }),
   });
+  clearTimeout(timeout);
   if (!r.ok) throw new Error(`Groq error: ${r.status}`);
   const d = await r.json();
   return d.choices?.[0]?.message?.content || '';
