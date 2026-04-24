@@ -12,10 +12,12 @@
   flex: 1;
   height: 100vh;
   overflow-y: auto;
+  overflow-x: hidden;
   padding: 2rem;
   margin-left: 260px;
   transition: margin-left 0.3s ease;
   background: #F9FAFB;
+  position: relative;
 }
 
 .contentWrapper {
