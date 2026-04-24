@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef, useMemo } from 'react';
+import { createPortal } from 'react-dom';
 import {
   BarChart, Bar, PieChart, Pie, Cell, AreaChart, Area,
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
@@ -324,14 +325,19 @@ function RelationPanel({columns,dsId,onClose}:{columns:any[];dsId:string;onClose
     typeA==='categorical'&&typeB==='categorical'?'Categorical ↔ Categorical (Frequency)':
     'Categorical ↔ Numerical (Group Average)';
 
-  // Scroll lock - body scroll band karo jab modal open ho
+  // Scroll lock - main container ka scroll band karo
   useEffect(()=>{
-    const prev=document.body.style.overflow;
-    document.body.style.overflow='hidden';
-    return()=>{document.body.style.overflow=prev;};
+    const mainEl = document.querySelector('main') as HTMLElement;
+    const prev = mainEl ? mainEl.style.overflow : document.body.style.overflow;
+    if(mainEl){ mainEl.style.overflow='hidden'; } 
+    else { document.body.style.overflow='hidden'; }
+    return()=>{
+      if(mainEl){ mainEl.style.overflow=prev; }
+      else { document.body.style.overflow=prev; }
+    };
   },[]);
 
-  return(
+  return createPortal(
     <div style={{position:'fixed',top:0,left:0,right:0,bottom:0,background:'rgba(17,24,39,0.5)',zIndex:9999,display:'flex',alignItems:'center',justifyContent:'center',padding:'1rem'}}
       onClick={e=>{if(e.target===e.currentTarget)onClose();}}>
       <div style={{width:'100%',maxWidth:900,maxHeight:'90vh',overflowY:'auto',background:'#FFFFFF',borderRadius:20,border:`1px solid ${T.border}`,boxShadow:'0 24px 80px rgba(0,0,0,0.6)'}}>
@@ -487,10 +493,8 @@ function RelationPanel({columns,dsId,onClose}:{columns:any[];dsId:string;onClose
         </div>
       </div>
     </div>
-  );
+  , document.body);
 }
-
-/* ── Per-question auto AI insight ── */
 function QInsight({q,totalSubmissions}:{q:any;totalSubmissions:number}){
   const [txt,setTxt]=useState('');
   const [load,setLoad]=useState(false);
@@ -711,9 +715,14 @@ function ChatPanel({isOpen,onClose,ctx,dtype,did}:any){
 function ReportModal({isOpen,onClose,title,reportText,loading,context}:{isOpen:boolean;onClose:()=>void;title:string;reportText:string;loading:boolean;context?:any}){
   useEffect(()=>{
     if(!isOpen)return;
-    const prev=document.body.style.overflow;
-    document.body.style.overflow='hidden';
-    return()=>{document.body.style.overflow=prev;};
+    const mainEl = document.querySelector('main') as HTMLElement;
+    const prev = mainEl ? mainEl.style.overflow : document.body.style.overflow;
+    if(mainEl){ mainEl.style.overflow='hidden'; }
+    else { document.body.style.overflow='hidden'; }
+    return()=>{
+      if(mainEl){ mainEl.style.overflow=prev; }
+      else { document.body.style.overflow=prev; }
+    };
   },[isOpen]);
   if(!isOpen)return null;
   // Simple markdown-to-HTML converter
@@ -903,7 +912,7 @@ function ReportModal({isOpen,onClose,title,reportText,loading,context}:{isOpen:b
     }
     pdf.save(`${title.replace(/[^a-z0-9]/gi,'_')}_report.pdf`);
   };
-  return(
+  return createPortal(
     <div style={{position:'fixed',top:0,left:0,right:0,bottom:0,background:'rgba(15,23,42,0.6)',zIndex:9999,display:'flex',alignItems:'center',justifyContent:'center',padding:'1rem'}}
       onClick={e=>{if(e.target===e.currentTarget)onClose();}}>
       <div style={{width:'100%',maxWidth:860,maxHeight:'92vh',display:'flex',flexDirection:'column',background:'#FFFFFF',borderRadius:20,border:'1px solid #E2E8F0',boxShadow:'0 32px 80px rgba(0,0,0,0.35)'}}>
@@ -946,7 +955,7 @@ function ReportModal({isOpen,onClose,title,reportText,loading,context}:{isOpen:b
         </div>
       </div>
     </div>
-  );
+  , document.body);
 }
 
 /* ── Inline Charts inside ReportModal ── */
