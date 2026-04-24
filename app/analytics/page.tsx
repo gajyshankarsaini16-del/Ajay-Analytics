@@ -718,7 +718,6 @@ function ReportModal({isOpen,onClose,title,reportText,loading,context}:{isOpen:b
   }
   const downloadPdf=async()=>{
     const {default:jsPDF}=await import('jspdf');
-    // Chart.js for chart rendering
     const ChartModule=await import('chart.js');
     const {Chart,BarController,BarElement,CategoryScale,LinearScale,Tooltip,Legend,
            ArcElement,PieController,DoughnutController}=ChartModule;
@@ -729,6 +728,90 @@ function ReportModal({isOpen,onClose,title,reportText,loading,context}:{isOpen:b
     const pw=pdf.internal.pageSize.getWidth();
     const ph=pdf.internal.pageSize.getHeight();
     const m=15; let y=m;
+    const COLORS=['#3B82F6','#10B981','#F59E0B','#EF4444','#8B5CF6','#EC4899','#14B8A6','#F97316'];
+
+    // ── Helper: render chart to PNG dataURL ──
+    const renderChart=(cfg:any,w=900,h=400):Promise<string>=>{
+      return new Promise(resolve=>{
+        const canvas=document.createElement('canvas');
+        canvas.width=w; canvas.height=h;
+        const ex=Chart.getChart(canvas); if(ex)ex.destroy();
+        const chart=new Chart(canvas,cfg);
+        setTimeout(()=>{ resolve(canvas.toDataURL('image/png')); chart.destroy(); },400);
+      });
+    };
+
+    // ── Helper: draw one full-width chart in PDF ──
+    const drawChart=async(label:string,cfg:any)=>{
+      const chartH=70;
+      if(y+chartH+14>ph-20){ pdf.addPage(); y=m; }
+      // label
+      pdf.setTextColor(37,99,235); pdf.setFontSize(8); pdf.setFont('helvetica','bold');
+      const lw=pdf.splitTextToSize(`📊 ${label}`,pw-m*2);
+      pdf.text(lw,m,y+5); const lh=lw.length*4.5;
+      // chart image full width
+      const imgData=await renderChart(cfg);
+      pdf.addImage(imgData,'PNG',m,y+lh+3,pw-m*2,chartH-lh-3);
+      // border
+      pdf.setDrawColor(226,232,240); pdf.setLineWidth(0.3);
+      pdf.roundedRect(m,y,pw-m*2,chartH,3,3,'S');
+      y+=chartH+8;
+    };
+
+    // ── Build all chart configs ──
+    const cols:any[]=(context?.columns||[]);
+    const questions:any[]=(context?.questions||[]);
+    const allCharts:{label:string;cfg:any}[]=[];
+
+    if(cols.length>0){
+      const catCols=cols
+        .filter((c:any)=>c.type==='categorical'&&c.uniqueCount>=2&&c.uniqueCount<=20&&c.topValues?.length>0)
+        .sort((a:any,b:any)=>a.uniqueCount-b.uniqueCount).slice(0,6);
+      for(const col of catCols){
+        const top=col.topValues.slice(0,7);
+        const data=top.map((v:any)=>v.value||v.count||0);
+        const total=data.reduce((a:number,b:number)=>a+b,0);
+        allCharts.push({label:col.name.replace(/_/g,' '),cfg:{
+          type:'bar',
+          data:{labels:top.map((v:any)=>String(v.name||'').slice(0,20)),
+            datasets:[{label:'Count',data,
+              backgroundColor:COLORS,borderRadius:5,borderSkipped:false}]},
+          options:{responsive:false,
+            plugins:{legend:{display:false},tooltip:{callbacks:{
+              label:(ctx:any)=>`${ctx.raw} (${Math.round((ctx.raw as number)/total*100)}%)`
+            }}},
+            scales:{x:{ticks:{font:{size:13},maxRotation:30},grid:{display:false}},
+              y:{beginAtZero:true,ticks:{font:{size:13}},grid:{color:'#F1F5F9'}}}}
+        }});
+      }
+      const numCols=cols.filter((c:any)=>c.type==='numeric'&&c.histogram?.length>0).slice(0,2);
+      for(const col of numCols){
+        allCharts.push({label:col.name.replace(/_/g,' ')+' Distribution',cfg:{
+          type:'bar',
+          data:{labels:col.histogram.map((b:any)=>b.range),
+            datasets:[{label:'Count',data:col.histogram.map((b:any)=>b.count),
+              backgroundColor:'#6366F1',borderRadius:4}]},
+          options:{responsive:false,plugins:{legend:{display:false}},
+            scales:{x:{ticks:{font:{size:13},maxRotation:30},grid:{display:false}},
+              y:{beginAtZero:true,ticks:{font:{size:13}}}}}
+        }});
+      }
+    }
+    if(questions.length>0){
+      questions.filter((q:any)=>q.options?.length>=2&&q.options?.length<=8).slice(0,6).forEach((q:any)=>{
+        const data=q.options.map((o:any)=>o.count||0);
+        const total=data.reduce((a:number,b:number)=>a+b,0);
+        allCharts.push({label:(q.question||q.label||'').slice(0,60),cfg:{
+          type:'bar',
+          data:{labels:q.options.map((o:any)=>String(o.value||o.label||o.name||'').slice(0,20)),
+            datasets:[{label:'Responses',data,backgroundColor:COLORS,borderRadius:5}]},
+          options:{responsive:false,plugins:{legend:{display:false},tooltip:{callbacks:{
+            label:(ctx:any)=>`${ctx.raw} (${Math.round((ctx.raw as number)/total*100)}%)`}}},
+            scales:{x:{ticks:{font:{size:13},maxRotation:30},grid:{display:false}},
+              y:{beginAtZero:true,ticks:{font:{size:13}}}}}
+        }});
+      });
+    }
 
     // ── Header bar ──
     pdf.setFillColor(37,99,235); pdf.rect(0,0,pw,26,'F');
@@ -744,193 +827,55 @@ function ReportModal({isOpen,onClose,title,reportText,loading,context}:{isOpen:b
     pdf.text(titleLines,m,y); y+=titleLines.length*8+2;
     pdf.setDrawColor(37,99,235); pdf.setLineWidth(0.8); pdf.line(m,y,pw-m,y); y+=8;
 
-    // ── Body text (markdown → PDF) ──
-    pdf.setTextColor(30,41,59); pdf.setFontSize(9); pdf.setFont('helvetica','normal');
-    const lines=reportText.split('\n');
-    for(const line of lines){
-      const clean=line.replace(/^#{1,3}\s*/,'').replace(/\*\*/g,'').replace(/^[-•*]\s*/,'• ');
-      const isH2=line.startsWith('## '); const isH3=line.startsWith('### ');
-      if(isH2){
-        if(y>ph-30){pdf.addPage();y=m;}
-        y+=4;
-        pdf.setFont('helvetica','bold'); pdf.setFontSize(11); pdf.setTextColor(37,99,235);
-        const h=pdf.splitTextToSize(clean,pw-m*2);
-        pdf.text(h,m,y); y+=h.length*7;
-        pdf.setDrawColor(191,219,254); pdf.setLineWidth(0.3); pdf.line(m,y,pw-m,y); y+=4;
-        pdf.setFont('helvetica','normal'); pdf.setFontSize(9); pdf.setTextColor(30,41,59);
-      } else if(isH3){
-        if(y>ph-25){pdf.addPage();y=m;}
-        pdf.setFont('helvetica','bold'); pdf.setFontSize(10); pdf.setTextColor(51,65,85);
-        const h=pdf.splitTextToSize(clean,pw-m*2);
-        pdf.text(h,m,y); y+=h.length*6+2;
-        pdf.setFont('helvetica','normal'); pdf.setFontSize(9); pdf.setTextColor(30,41,59);
-      } else if(clean.trim()){
-        const wrapped=pdf.splitTextToSize(clean,pw-m*2);
-        if(y+wrapped.length*5>ph-20){pdf.addPage();y=m;}
-        pdf.text(wrapped,m,y); y+=wrapped.length*5.5+1;
-      } else { y+=3; }
+    // ── Render text sections + interleave charts after each ## section ──
+    // Split into sections by ## headings
+    const sections=reportText.split(/(?=^## )/m).filter(Boolean);
+    // Distribute charts evenly: after every N sections insert a chart
+    const chartsPerSection=allCharts.length>0?Math.ceil(sections.length/allCharts.length):0;
+    let chartIdx=0;
+
+    const writeSection=async(sectionText:string)=>{
+      const lines=sectionText.split('\n');
+      pdf.setTextColor(30,41,59); pdf.setFontSize(9); pdf.setFont('helvetica','normal');
+      for(const line of lines){
+        const clean=line.replace(/^#{1,3}\s*/,'').replace(/\*\*/g,'').replace(/^[-•*]\s*/,'• ');
+        const isH2=line.startsWith('## '); const isH3=line.startsWith('### ');
+        if(isH2){
+          if(y>ph-40){pdf.addPage();y=m;}
+          y+=6;
+          pdf.setFont('helvetica','bold'); pdf.setFontSize(12); pdf.setTextColor(37,99,235);
+          const h=pdf.splitTextToSize(clean,pw-m*2);
+          pdf.text(h,m,y); y+=h.length*7;
+          pdf.setDrawColor(191,219,254); pdf.setLineWidth(0.4); pdf.line(m,y,pw-m,y); y+=5;
+          pdf.setFont('helvetica','normal'); pdf.setFontSize(9); pdf.setTextColor(30,41,59);
+        } else if(isH3){
+          if(y>ph-30){pdf.addPage();y=m;}
+          y+=2;
+          pdf.setFont('helvetica','bold'); pdf.setFontSize(10); pdf.setTextColor(51,65,85);
+          const h=pdf.splitTextToSize(clean,pw-m*2);
+          pdf.text(h,m,y); y+=h.length*6+2;
+          pdf.setFont('helvetica','normal'); pdf.setFontSize(9); pdf.setTextColor(30,41,59);
+        } else if(clean.trim()){
+          const wrapped=pdf.splitTextToSize(clean,pw-m*2);
+          if(y+wrapped.length*5.5>ph-22){pdf.addPage();y=m;}
+          pdf.text(wrapped,m,y); y+=wrapped.length*5.5+1;
+        } else { y+=3; }
+      }
+    };
+
+    for(let si=0;si<sections.length;si++){
+      await writeSection(sections[si]);
+      y+=4;
+      // Insert next chart after this section if available
+      if(allCharts.length>0&&chartIdx<allCharts.length){
+        const{label,cfg}=allCharts[chartIdx++];
+        await drawChart(label,cfg);
+      }
     }
-
-    // ── Charts Section ──
-    if(context){
-      // Helper: render a Chart.js chart to dataURL
-      const renderChart=(cfg:any,w=500,h=260):Promise<string>=>{
-        return new Promise(resolve=>{
-          const canvas=document.createElement('canvas');
-          canvas.width=w; canvas.height=h;
-          // destroy any existing chart on this canvas
-          const existing=Chart.getChart(canvas);
-          if(existing)existing.destroy();
-          const chart=new Chart(canvas,cfg);
-          // Use setTimeout to let Chart.js finish rendering
-          setTimeout(()=>{
-            const url=canvas.toDataURL('image/png');
-            chart.destroy();
-            resolve(url);
-          },300);
-        });
-      };
-
-      // Pick columns for charts
-      const cols:any[]=context?.columns||[];
-      // For forms: questions array
-      const questions:any[]=context?.questions||[];
-
-      // Build chart configs from dataset columns
-      const chartCfgs:Array<{label:string;cfg:any}>=[];
-
-      if(cols.length>0){
-        // Categorical bar charts (top 6 values, skip high-cardinality)
-        const catCols=cols.filter((c:any)=>c.type==='categorical'&&c.uniqueCount<=20&&c.uniqueCount>=2&&c.topValues?.length>0);
-        // Pick top 5 most interesting (fewest unique = clearest chart)
-        const picked=catCols.sort((a:any,b:any)=>a.uniqueCount-b.uniqueCount).slice(0,5);
-        for(const col of picked){
-          const top=col.topValues.slice(0,6);
-          const labels=top.map((v:any)=>String(v.name).slice(0,18));
-          const data=top.map((v:any)=>v.value);
-          const total=data.reduce((a:number,b:number)=>a+b,0);
-          const pcts=data.map((d:number)=>Math.round(d/total*100));
-          chartCfgs.push({
-            label:col.name.replace(/_/g,' ').slice(0,50),
-            cfg:{
-              type:'bar',
-              data:{
-                labels,
-                datasets:[{
-                  label:'Responses',
-                  data,
-                  backgroundColor:['#3B82F6','#10B981','#F59E0B','#EF4444','#8B5CF6','#EC4899'],
-                  borderRadius:4,
-                }]
-              },
-              options:{
-                responsive:false,
-                plugins:{
-                  legend:{display:false},
-                  tooltip:{callbacks:{label:(ctx:any)=>`${ctx.raw} (${pcts[ctx.dataIndex]}%)`}}
-                },
-                scales:{
-                  x:{ticks:{font:{size:10}},grid:{display:false}},
-                  y:{ticks:{font:{size:10}},beginAtZero:true}
-                }
-              }
-            }
-          });
-        }
-        // Numeric histogram charts
-        const numCols=cols.filter((c:any)=>c.type==='numeric'&&c.histogram?.length>0).slice(0,2);
-        for(const col of numCols){
-          chartCfgs.push({
-            label:col.name.replace(/_/g,' ').slice(0,50),
-            cfg:{
-              type:'bar',
-              data:{
-                labels:col.histogram.map((b:any)=>b.range),
-                datasets:[{
-                  label:'Count',
-                  data:col.histogram.map((b:any)=>b.count),
-                  backgroundColor:'#6366F1',
-                  borderRadius:3,
-                }]
-              },
-              options:{
-                responsive:false,
-                plugins:{legend:{display:false}},
-                scales:{
-                  x:{ticks:{font:{size:9}},grid:{display:false}},
-                  y:{beginAtZero:true,ticks:{font:{size:9}}}
-                }
-              }
-            }
-          });
-        }
-      }
-
-      // For form questions
-      if(questions.length>0){
-        const qPicked=questions.filter((q:any)=>q.options?.length>=2&&q.options?.length<=8).slice(0,6);
-        for(const q of qPicked){
-          const labels=q.options.map((o:any)=>String(o.value||o.label||o.name||'').slice(0,18));
-          const data=q.options.map((o:any)=>o.count||o.value||0);
-          const total=data.reduce((a:number,b:number)=>a+b,0);
-          chartCfgs.push({
-            label:q.question?.slice(0,60)||q.label?.slice(0,60)||'Question',
-            cfg:{
-              type:'bar',
-              data:{
-                labels,
-                datasets:[{
-                  label:'Responses',
-                  data,
-                  backgroundColor:['#3B82F6','#10B981','#F59E0B','#EF4444','#8B5CF6','#EC4899','#14B8A6','#F97316'],
-                  borderRadius:4,
-                }]
-              },
-              options:{
-                responsive:false,
-                plugins:{legend:{display:false}},
-                scales:{
-                  x:{ticks:{font:{size:9}},grid:{display:false}},
-                  y:{beginAtZero:true,ticks:{font:{size:9}}}
-                }
-              }
-            }
-          });
-        }
-      }
-
-      if(chartCfgs.length>0){
-        // Charts section header
-        pdf.addPage(); y=m;
-        pdf.setFillColor(37,99,235); pdf.rect(0,0,pw,26,'F');
-        pdf.setTextColor(255,255,255); pdf.setFontSize(13); pdf.setFont('helvetica','bold');
-        pdf.text('📊 Charts & Visualizations',m,17);
-        y=36;
-
-        // Render 2 charts per row
-        const chartW=(pw-m*2-6)/2;
-        const chartH=55;
-        let col=0;
-        for(let i=0;i<chartCfgs.length;i++){
-          const{label,cfg}=chartCfgs[i];
-          const imgData=await renderChart(cfg,500,260);
-          const xPos=col===0?m:m+chartW+6;
-          if(col===0&&y+chartH+14>ph-20){pdf.addPage();y=m;}
-          // Chart title
-          pdf.setTextColor(30,41,59); pdf.setFontSize(7); pdf.setFont('helvetica','bold');
-          const titleWrapped=pdf.splitTextToSize(label,chartW);
-          pdf.text(titleWrapped,xPos,y+4);
-          const titleH=titleWrapped.length*4;
-          // Chart image
-          pdf.addImage(imgData,'PNG',xPos,y+titleH+2,chartW,chartH-titleH-2);
-          // Border
-          pdf.setDrawColor(226,232,240); pdf.setLineWidth(0.3);
-          pdf.roundedRect(xPos,y,chartW,chartH,2,2,'S');
-          if(col===0){col=1;}
-          else{col=0;y+=chartH+6;}
-        }
-        if(col===1)y+=chartH+6;
-      }
+    // Render any remaining charts at end
+    while(chartIdx<allCharts.length){
+      const{label,cfg}=allCharts[chartIdx++];
+      await drawChart(label,cfg);
     }
 
     // ── Footer on every page ──
