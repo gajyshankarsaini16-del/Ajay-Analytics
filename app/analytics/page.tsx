@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import {
   BarChart, Bar, PieChart, Pie, Cell, AreaChart, Area,
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
@@ -979,10 +979,184 @@ function ReportModal({isOpen,onClose,title,reportText,loading,context}:{isOpen:b
             <div style={{fontFamily:'Georgia, serif'}}
               dangerouslySetInnerHTML={{__html:renderMd(reportText)}}/>
           )}
+          {!loading&&reportText&&context&&(
+            <ReportCharts context={context}/>
+          )}
           {!loading&&!reportText&&(
             <p style={{color:'#9CA3AF',textAlign:'center',padding:'3rem'}}>No report generated yet.</p>
           )}
         </div>
+      </div>
+    </div>
+  );
+}
+
+/* ── Inline Charts inside ReportModal ── */
+function ReportCharts({context}:{context:any}){
+  const canvasRefs=useRef<{[key:string]:HTMLCanvasElement|null}>({});
+  const chartsRef=useRef<any[]>([]);
+
+  // Build chart configs from context
+  function buildChartCfgs(ctx:any):{id:string;label:string;cfg:any}[]{
+    const cfgs:{id:string;label:string;cfg:any}[]=[];
+    const COLORS=['#3B82F6','#10B981','#F59E0B','#EF4444','#8B5CF6','#EC4899','#14B8A6','#F97316'];
+
+    const cols:any[]=ctx?.columns||[];
+    const questions:any[]=ctx?.questions||[];
+
+    if(cols.length>0){
+      // Categorical bar charts
+      const catCols=cols
+        .filter((c:any)=>c.type==='categorical'&&c.uniqueCount>=2&&c.uniqueCount<=15&&c.topValues?.length>0)
+        .sort((a:any,b:any)=>a.uniqueCount-b.uniqueCount)
+        .slice(0,6);
+      catCols.forEach((col:any,i:number)=>{
+        const top=col.topValues.slice(0,6);
+        cfgs.push({
+          id:`cat_${i}`,
+          label:col.name.replace(/_/g,' '),
+          cfg:{
+            type:'bar',
+            data:{
+              labels:top.map((v:any)=>String(v.name||v.label||'').slice(0,16)),
+              datasets:[{
+                label:'Count',
+                data:top.map((v:any)=>v.value||v.count||0),
+                backgroundColor:COLORS,
+                borderRadius:5,
+                borderSkipped:false,
+              }]
+            },
+            options:{
+              responsive:true,maintainAspectRatio:false,
+              plugins:{legend:{display:false},tooltip:{callbacks:{
+                label:(ctx:any)=>{
+                  const total=ctx.dataset.data.reduce((a:number,b:number)=>a+b,0);
+                  return `${ctx.raw} (${Math.round(ctx.raw/total*100)}%)`;
+                }
+              }}},
+              scales:{
+                x:{ticks:{font:{size:11},maxRotation:30},grid:{display:false}},
+                y:{beginAtZero:true,ticks:{font:{size:11}},grid:{color:'#F1F5F9'}}
+              }
+            }
+          }
+        });
+      });
+      // Numeric histogram
+      const numCols=cols.filter((c:any)=>c.type==='numeric'&&c.histogram?.length>0).slice(0,2);
+      numCols.forEach((col:any,i:number)=>{
+        cfgs.push({
+          id:`num_${i}`,
+          label:col.name.replace(/_/g,' ')+' Distribution',
+          cfg:{
+            type:'bar',
+            data:{
+              labels:col.histogram.map((b:any)=>b.range),
+              datasets:[{label:'Count',data:col.histogram.map((b:any)=>b.count),backgroundColor:'#6366F1',borderRadius:3}]
+            },
+            options:{
+              responsive:true,maintainAspectRatio:false,
+              plugins:{legend:{display:false}},
+              scales:{
+                x:{ticks:{font:{size:10},maxRotation:30},grid:{display:false}},
+                y:{beginAtZero:true,ticks:{font:{size:10}},grid:{color:'#F1F5F9'}}
+              }
+            }
+          }
+        });
+      });
+    }
+
+    if(questions.length>0){
+      questions
+        .filter((q:any)=>q.options?.length>=2&&q.options?.length<=8)
+        .slice(0,6)
+        .forEach((q:any,i:number)=>{
+          const labels=q.options.map((o:any)=>String(o.value||o.label||o.name||'').slice(0,16));
+          const data=q.options.map((o:any)=>o.count||0);
+          cfgs.push({
+            id:`q_${i}`,
+            label:(q.question||q.label||'Question').slice(0,60),
+            cfg:{
+              type:q.options.length<=4?'doughnut':'bar',
+              data:{
+                labels,
+                datasets:[{
+                  label:'Responses',data,
+                  backgroundColor:COLORS,
+                  borderRadius:q.options.length>4?4:0,
+                  borderWidth:q.options.length<=4?2:0,
+                }]
+              },
+              options:{
+                responsive:true,maintainAspectRatio:false,
+                plugins:{
+                  legend:{display:q.options.length<=4,position:'right' as const,labels:{font:{size:11},boxWidth:12}},
+                  tooltip:{callbacks:{label:(ctx:any)=>{
+                    const total=ctx.dataset.data.reduce((a:number,b:number)=>a+b,0);
+                    return `${ctx.raw} (${Math.round(ctx.raw/total*100)}%)`;
+                  }}}
+                },
+                scales:q.options.length>4?{
+                  x:{ticks:{font:{size:10},maxRotation:30},grid:{display:false}},
+                  y:{beginAtZero:true,ticks:{font:{size:10}}}
+                }:{x:{display:false},y:{display:false}}
+              }
+            }
+          });
+        });
+    }
+    return cfgs;
+  }
+
+  const chartCfgs=useMemo(()=>buildChartCfgs(context),[context]);
+
+  useEffect(()=>{
+    if(chartCfgs.length===0)return;
+    // Destroy old charts
+    chartsRef.current.forEach(c=>{try{c.destroy();}catch{}});
+    chartsRef.current=[];
+
+    const load=async()=>{
+      const ChartModule=await import('chart.js');
+      const{Chart,BarController,BarElement,CategoryScale,LinearScale,Tooltip,Legend,
+            ArcElement,PieController,DoughnutController}=ChartModule;
+      Chart.register(BarController,BarElement,CategoryScale,LinearScale,Tooltip,Legend,
+                     ArcElement,PieController,DoughnutController);
+
+      chartCfgs.forEach(({id,cfg})=>{
+        const canvas=canvasRefs.current[id];
+        if(!canvas)return;
+        const existing=Chart.getChart(canvas);
+        if(existing)existing.destroy();
+        const chart=new Chart(canvas,cfg);
+        chartsRef.current.push(chart);
+      });
+    };
+    load();
+    return()=>{chartsRef.current.forEach(c=>{try{c.destroy();}catch{}});chartsRef.current=[];};
+  },[chartCfgs]);
+
+  if(chartCfgs.length===0)return null;
+
+  return(
+    <div style={{marginTop:'2rem'}}>
+      <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:'1.25rem',paddingBottom:'0.75rem',borderBottom:'2px solid #E2E8F0'}}>
+        <div style={{padding:'6px 8px',background:'linear-gradient(135deg,#2563EB,#7C3AED)',borderRadius:8}}>
+          <BarChart2 size={14} color="#fff"/>
+        </div>
+        <p style={{margin:0,fontSize:'1rem',fontWeight:800,color:'#1E293B'}}>Charts & Visualizations</p>
+      </div>
+      <div style={{display:'grid',gridTemplateColumns:'repeat(2,1fr)',gap:'1rem'}}>
+        {chartCfgs.map(({id,label})=>(
+          <div key={id} style={{background:'#F8FAFC',borderRadius:12,border:'1px solid #E2E8F0',padding:'1rem'}}>
+            <p style={{margin:'0 0 0.6rem',fontSize:'0.78rem',fontWeight:700,color:'#334155',textTransform:'uppercase',letterSpacing:'0.03em'}}>{label}</p>
+            <div style={{height:200,position:'relative'}}>
+              <canvas ref={el=>{canvasRefs.current[id]=el;}} style={{width:'100%',height:'100%'}}/>
+            </div>
+          </div>
+        ))}
       </div>
     </div>
   );
