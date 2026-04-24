@@ -700,6 +700,70 @@ function ChatPanel({isOpen,onClose,ctx,dtype,did}:any){
   );
 }
 
+/* ── Full Report Modal ── */
+function ReportModal({isOpen,onClose,title,reportText,loading}:{isOpen:boolean;onClose:()=>void;title:string;reportText:string;loading:boolean}){
+  if(!isOpen)return null;
+  // Simple markdown-to-HTML converter
+  function renderMd(md:string){
+    return md
+      .replace(/^## (.+)$/gm,'<h2 style="font-size:1.1rem;font-weight:800;color:#1E3A5F;margin:1.5rem 0 0.5rem;padding-bottom:4px;border-bottom:2px solid #3B82F6">$1</h2>')
+      .replace(/^### (.+)$/gm,'<h3 style="font-size:0.95rem;font-weight:700;color:#334155;margin:1rem 0 0.35rem">$1</h3>')
+      .replace(/^\*\*(.+?)\*\*/gm,'<strong>$1</strong>')
+      .replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>')
+      .replace(/^- (.+)$/gm,'<li style="margin:4px 0;color:#374151;font-size:0.875rem;line-height:1.6">$1</li>')
+      .replace(/^(\d+)\. (.+)$/gm,'<li style="margin:4px 0;color:#374151;font-size:0.875rem;line-height:1.6"><b style="color:#3B82F6">$1.</b> $2</li>')
+      .replace(/(<li[\s\S]+?<\/li>)/g,'<ul style="margin:0.5rem 0 0.5rem 1rem;padding:0">$1</ul>')
+      .replace(/\n\n/g,'</p><p style="margin:0.5rem 0;color:#374151;font-size:0.875rem;line-height:1.7">')
+      .replace(/^(?!<[h|u|l|p])(.+)$/gm,'<p style="margin:0.5rem 0;color:#374151;font-size:0.875rem;line-height:1.7">$1</p>');
+  }
+  const downloadTxt=()=>{
+    const blob=new Blob([reportText],{type:'text/plain'});
+    const a=document.createElement('a');a.href=URL.createObjectURL(blob);
+    a.download=`${title.replace(/[^a-z0-9]/gi,'_')}_report.txt`;a.click();
+  };
+  return(
+    <div style={{position:'fixed',inset:0,background:'rgba(15,23,42,0.6)',zIndex:1000,display:'flex',alignItems:'center',justifyContent:'center',padding:'1rem'}}
+      onClick={e=>{if(e.target===e.currentTarget)onClose();}}>
+      <div style={{width:'100%',maxWidth:860,maxHeight:'92vh',display:'flex',flexDirection:'column',background:'#FFFFFF',borderRadius:20,border:'1px solid #E2E8F0',boxShadow:'0 32px 80px rgba(0,0,0,0.35)'}}>
+        {/* Header */}
+        <div style={{padding:'1.25rem 1.5rem',borderBottom:'1px solid #E2E8F0',display:'flex',alignItems:'center',justifyContent:'space-between',background:'linear-gradient(135deg,#EFF6FF,#F5F3FF)',borderRadius:'20px 20px 0 0',flexShrink:0}}>
+          <div style={{display:'flex',alignItems:'center',gap:10}}>
+            <div style={{padding:8,borderRadius:10,background:'linear-gradient(135deg,#2563EB,#7C3AED)'}}><FileText size={16} color="#fff"/></div>
+            <div>
+              <p style={{margin:0,fontSize:'1rem',fontWeight:800,color:'#1E293B'}}>Full Analytics Report</p>
+              <p style={{margin:0,fontSize:'0.75rem',color:'#64748B'}}>{title}</p>
+            </div>
+          </div>
+          <div style={{display:'flex',gap:8}}>
+            {reportText&&!loading&&(
+              <button onClick={downloadTxt} style={{display:'flex',alignItems:'center',gap:6,padding:'7px 14px',background:'#10B98118',border:'1px solid #10B98144',borderRadius:8,color:'#10B981',cursor:'pointer',fontSize:'0.78rem',fontWeight:700}}>
+                <Download size={13}/> Download .txt
+              </button>
+            )}
+            <button onClick={onClose} style={{background:'none',border:'none',color:'#64748B',cursor:'pointer',padding:4}}><X size={20}/></button>
+          </div>
+        </div>
+        {/* Body */}
+        <div style={{flex:1,overflowY:'auto',padding:'1.5rem'}}>
+          {loading&&(
+            <div style={{display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',padding:'4rem',gap:16}}>
+              <Loader2 size={36} color="#2563EB" style={{animation:'spin 1s linear infinite'}}/>
+              <p style={{margin:0,color:'#64748B',fontSize:'0.9rem'}}>AI is writing your full report… this may take 10–20 seconds</p>
+            </div>
+          )}
+          {!loading&&reportText&&(
+            <div style={{fontFamily:'Georgia, serif'}}
+              dangerouslySetInnerHTML={{__html:renderMd(reportText)}}/>
+          )}
+          {!loading&&!reportText&&(
+            <p style={{color:'#9CA3AF',textAlign:'center',padding:'3rem'}}>No report generated yet.</p>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /* ── Form Analysis ── */
 function FormAnalysis({formData,formId}:{formData:any;formId:string}){
   const [insights,setInsights]=useState<string[]>([]);
@@ -707,8 +771,21 @@ function FormAnalysis({formData,formId}:{formData:any;formId:string}){
   const [chatOpen,setChatOpen]=useState(false);
   const [mounted,setMounted]=useState(false);
   const [downloading,setDownloading]=useState(false);
+  const [showReport,setShowReport]=useState(false);
+  const [reportText,setReportText]=useState('');
+  const [reportLoading,setReportLoading]=useState(false);
   const chartsRef=useRef<HTMLDivElement>(null);
   useEffect(()=>setMounted(true),[]);
+
+  const genFullReport=async()=>{
+    setShowReport(true);setReportLoading(true);setReportText('');
+    try{
+      const r=await fetch('/api/analytics/report',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({type:'form',context:formData})});
+      const d=await r.json();
+      setReportText(d.report||d.error||'Could not generate report.');
+    }catch{setReportText('Error generating report. Please try again.');}
+    setReportLoading(false);
+  };
 
   const genInsights=async()=>{
     setInsLoad(true);
@@ -738,6 +815,9 @@ function FormAnalysis({formData,formId}:{formData:any;formId:string}){
         <div style={{display:'flex',gap:8}}>
           <button onClick={genInsights} disabled={insLoad} style={{display:'flex',alignItems:'center',gap:7,padding:'9px 18px',background:insLoad?T.card:`linear-gradient(135deg,${T.accent},${T.accent2})`,border:`1px solid ${insLoad?T.border:'transparent'}`,borderRadius:10,color:'#fff',cursor:insLoad?'not-allowed':'pointer',fontSize:'0.82rem',fontWeight:700}}>
             {insLoad?<Loader2 size={14} style={{animation:'spin 1s linear infinite'}}/>:<Zap size={14}/>}{insLoad?'Analyzing…':insights.length?'Refresh Insights':'Generate AI Insights'}
+          </button>
+          <button onClick={genFullReport} style={{display:'flex',alignItems:'center',gap:7,padding:'9px 18px',background:`${T.amber}18`,border:`1px solid ${T.amber}44`,borderRadius:10,color:T.amber,cursor:'pointer',fontSize:'0.82rem',fontWeight:700}}>
+            <FileText size={14}/> Full Report
           </button>
           <button onClick={()=>setChatOpen(true)} style={{display:'flex',alignItems:'center',gap:7,padding:'9px 18px',background:`${T.cyan}18`,border:`1px solid ${T.cyan}44`,borderRadius:10,color:T.cyan,cursor:'pointer',fontSize:'0.82rem',fontWeight:700}}><MessageSquare size={14}/> Ask AI</button>
         </div>
@@ -821,6 +901,7 @@ function FormAnalysis({formData,formId}:{formData:any;formId:string}){
           })}
         </div>
       </div>
+      <ReportModal isOpen={showReport} onClose={()=>setShowReport(false)} title={formData?.formTitle||'Form Report'} reportText={reportText} loading={reportLoading}/>
       <ChatPanel isOpen={chatOpen} onClose={()=>setChatOpen(false)} ctx={formData} dtype="form" did={formId}/>
     </div>
   );
@@ -835,8 +916,21 @@ function DatasetAnalysis({dsData,dsId}:{dsData:any;dsId:string}){
   const [mounted,setMounted]=useState(false);
   const [downloading,setDownloading]=useState(false);
   const [showRelation,setShowRelation]=useState(false);
+  const [showReport,setShowReport]=useState(false);
+  const [reportText,setReportText]=useState('');
+  const [reportLoading,setReportLoading]=useState(false);
   const chartsRef=useRef<HTMLDivElement>(null);
   useEffect(()=>setMounted(true),[]);
+
+  const genFullReport=async()=>{
+    setShowReport(true);setReportLoading(true);setReportText('');
+    try{
+      const r=await fetch('/api/analytics/report',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({type:'dataset',context:dsData})});
+      const d=await r.json();
+      setReportText(d.report||d.error||'Could not generate report.');
+    }catch{setReportText('Error generating report. Please try again.');}
+    setReportLoading(false);
+  };
 
   const genInsights=async()=>{
     setInsLoad(true);
@@ -873,6 +967,9 @@ function DatasetAnalysis({dsData,dsId}:{dsData:any;dsId:string}){
           {/* ← RELATION BUTTON */}
           <button onClick={()=>setShowRelation(true)} style={{display:'flex',alignItems:'center',gap:7,padding:'9px 18px',background:`${T.accent2}18`,border:`1px solid ${T.accent2}44`,borderRadius:10,color:T.accent2,cursor:'pointer',fontSize:'0.82rem',fontWeight:700}}>
             <GitBranch size={14}/> Relation
+          </button>
+          <button onClick={genFullReport} style={{display:'flex',alignItems:'center',gap:7,padding:'9px 18px',background:`${T.amber}18`,border:`1px solid ${T.amber}44`,borderRadius:10,color:T.amber,cursor:'pointer',fontSize:'0.82rem',fontWeight:700}}>
+            <FileText size={14}/> Full Report
           </button>
           <button onClick={handleDl} disabled={downloading} style={{display:'flex',alignItems:'center',gap:7,padding:'9px 18px',background:downloading?T.card:`${T.green}18`,border:`1px solid ${downloading?T.border:T.green+'66'}`,borderRadius:10,color:downloading?T.muted:T.green,cursor:downloading?'not-allowed':'pointer',fontSize:'0.82rem',fontWeight:700}}>
             {downloading?<Loader2 size={14} style={{animation:'spin 1s linear infinite'}}/>:<Download size={14}/>}{downloading?'Exporting…':'Download Report'}
@@ -1009,6 +1106,8 @@ function DatasetAnalysis({dsData,dsId}:{dsData:any;dsId:string}){
 
       {/* Relation Panel Modal */}
       {showRelation&&<RelationPanel columns={columns} dsId={dsId} onClose={()=>setShowRelation(false)}/>}
+
+      <ReportModal isOpen={showReport} onClose={()=>setShowReport(false)} title={dsData?.filename||'Dataset Report'} reportText={reportText} loading={reportLoading}/>
 
       <ChatPanel isOpen={chatOpen} onClose={()=>setChatOpen(false)} ctx={dsData} dtype="dataset" did={dsId}/>
     </div>
