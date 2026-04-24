@@ -1318,9 +1318,6 @@ function DatasetAnalysis({dsData,dsId}:{dsData:any;dsId:string}){
           <button onClick={genFullReport} style={{display:'flex',alignItems:'center',gap:7,padding:'9px 18px',background:`${T.amber}18`,border:`1px solid ${T.amber}44`,borderRadius:10,color:T.amber,cursor:'pointer',fontSize:'0.82rem',fontWeight:700}}>
             <FileText size={14}/> Full Report
           </button>
-          <button onClick={handleDl} disabled={downloading} style={{display:'flex',alignItems:'center',gap:7,padding:'9px 18px',background:downloading?T.card:`${T.green}18`,border:`1px solid ${downloading?T.border:T.green+'66'}`,borderRadius:10,color:downloading?T.muted:T.green,cursor:downloading?'not-allowed':'pointer',fontSize:'0.82rem',fontWeight:700}}>
-            {downloading?<Loader2 size={14} style={{animation:'spin 1s linear infinite'}}/>:<Download size={14}/>}{downloading?'Exporting…':'Download Report'}
-          </button>
           <button onClick={()=>setChatOpen(true)} style={{display:'flex',alignItems:'center',gap:7,padding:'9px 18px',background:`${T.cyan}18`,border:`1px solid ${T.cyan}44`,borderRadius:10,color:T.cyan,cursor:'pointer',fontSize:'0.82rem',fontWeight:700}}><MessageSquare size={14}/> Ask AI</button>
         </div>
       </div>
