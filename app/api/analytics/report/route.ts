@@ -62,7 +62,7 @@ async function callAI(system: string, prompt: string): Promise<string> {
   if (process.env.GEMINI_API_KEY) {
     try { return await callGemini(`${system}\n\n${prompt}`); } catch (e) { console.error('[Gemini]', e); }
   }
-  if (process.env.ANTHROPIC_API_KEY) {
+  if (process.env.GROQ_REPORT_API_KEY || process.env.GROQ_API_KEY) {
     try { return await callClaude(system, prompt); } catch (e) { console.error('[Claude]', e); }
   }
   throw new Error('No AI API key configured.');
