@@ -1,7 +1,16 @@
 {
   "functions": {
-    "app/api/datasets/route.ts": { "maxDuration": 30 },
-    "app/api/analytics/**": { "maxDuration": 30 },
-    "app/api/reports/**": { "maxDuration": 30 }
+    "app/api/datasets/route.ts": {
+      "maxDuration": 30
+    },
+    "app/api/analytics/**": {
+      "maxDuration": 60
+    },
+    "app/api/reports/**": {
+      "maxDuration": 60
+    },
+    "app/api/analytics/report/route.ts": {
+      "maxDuration": 60
+    }
   }
 }
