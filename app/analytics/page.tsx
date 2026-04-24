@@ -324,8 +324,15 @@ function RelationPanel({columns,dsId,onClose}:{columns:any[];dsId:string;onClose
     typeA==='categorical'&&typeB==='categorical'?'Categorical ↔ Categorical (Frequency)':
     'Categorical ↔ Numerical (Group Average)';
 
+  // Scroll lock - body scroll band karo jab modal open ho
+  useEffect(()=>{
+    const prev=document.body.style.overflow;
+    document.body.style.overflow='hidden';
+    return()=>{document.body.style.overflow=prev;};
+  },[]);
+
   return(
-    <div style={{position:'fixed',inset:0,background:'rgba(17,24,39,0.5)',zIndex:999,display:'flex',alignItems:'center',justifyContent:'center',padding:'1rem'}}
+    <div style={{position:'fixed',top:0,left:0,right:0,bottom:0,background:'rgba(17,24,39,0.5)',zIndex:9999,display:'flex',alignItems:'center',justifyContent:'center',padding:'1rem'}}
       onClick={e=>{if(e.target===e.currentTarget)onClose();}}>
       <div style={{width:'100%',maxWidth:900,maxHeight:'90vh',overflowY:'auto',background:'#FFFFFF',borderRadius:20,border:`1px solid ${T.border}`,boxShadow:'0 24px 80px rgba(0,0,0,0.6)'}}>
         {/* Header */}
@@ -702,6 +709,12 @@ function ChatPanel({isOpen,onClose,ctx,dtype,did}:any){
 
 /* ── Full Report Modal ── */
 function ReportModal({isOpen,onClose,title,reportText,loading,context}:{isOpen:boolean;onClose:()=>void;title:string;reportText:string;loading:boolean;context?:any}){
+  useEffect(()=>{
+    if(!isOpen)return;
+    const prev=document.body.style.overflow;
+    document.body.style.overflow='hidden';
+    return()=>{document.body.style.overflow=prev;};
+  },[isOpen]);
   if(!isOpen)return null;
   // Simple markdown-to-HTML converter
   function renderMd(md:string){
@@ -891,7 +904,7 @@ function ReportModal({isOpen,onClose,title,reportText,loading,context}:{isOpen:b
     pdf.save(`${title.replace(/[^a-z0-9]/gi,'_')}_report.pdf`);
   };
   return(
-    <div style={{position:'fixed',inset:0,background:'rgba(15,23,42,0.6)',zIndex:1000,display:'flex',alignItems:'center',justifyContent:'center',padding:'1rem'}}
+    <div style={{position:'fixed',top:0,left:0,right:0,bottom:0,background:'rgba(15,23,42,0.6)',zIndex:9999,display:'flex',alignItems:'center',justifyContent:'center',padding:'1rem'}}
       onClick={e=>{if(e.target===e.currentTarget)onClose();}}>
       <div style={{width:'100%',maxWidth:860,maxHeight:'92vh',display:'flex',flexDirection:'column',background:'#FFFFFF',borderRadius:20,border:'1px solid #E2E8F0',boxShadow:'0 32px 80px rgba(0,0,0,0.35)'}}>
         {/* Header */}
@@ -1321,9 +1334,6 @@ function DatasetAnalysis({dsData,dsId}:{dsData:any;dsId:string}){
       <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',flexWrap:'wrap',gap:'1rem'}}>
         <div><h2 style={{margin:0,fontSize:'1.3rem',fontWeight:800,color:T.text}}>{filename}</h2><p style={{margin:'4px 0 0',fontSize:'0.82rem',color:T.muted}}>Dataset Analysis Dashboard</p></div>
         <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
-          <button onClick={genInsights} disabled={insLoad} style={{display:'flex',alignItems:'center',gap:7,padding:'9px 18px',background:insLoad?T.card:`linear-gradient(135deg,${T.accent},${T.accent2})`,border:`1px solid ${insLoad?T.border:'transparent'}`,borderRadius:10,color:'#fff',cursor:insLoad?'not-allowed':'pointer',fontSize:'0.82rem',fontWeight:700}}>
-            {insLoad?<Loader2 size={14} style={{animation:'spin 1s linear infinite'}}/>:<Zap size={14}/>}{insLoad?'Analyzing…':insights.length?'Refresh Insights':'Generate AI Insights'}
-          </button>
           {/* ← RELATION BUTTON */}
           <button onClick={()=>setShowRelation(true)} style={{display:'flex',alignItems:'center',gap:7,padding:'9px 18px',background:`${T.accent2}18`,border:`1px solid ${T.accent2}44`,borderRadius:10,color:T.accent2,cursor:'pointer',fontSize:'0.82rem',fontWeight:700}}>
             <GitBranch size={14}/> Relation
