@@ -1123,7 +1123,13 @@ function FormAnalysis({formData,formId}:{formData:any;formId:string}){
   const genFullReport=async()=>{
     setShowReport(true);setReportLoading(true);setReportText('');
     try{
-      const r=await fetch('/api/analytics/report',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({type:'form',context:formData})});
+      const trimmedContext = formData ? {
+        ...formData,
+        preview: Array.isArray(formData.preview) ? formData.preview.slice(0, 10) : formData.preview,
+        rows: Array.isArray(formData.rows) ? formData.rows.slice(0, 10) : formData.rows,
+        data: Array.isArray(formData.data) ? formData.data.slice(0, 10) : formData.data,
+      } : formData;
+      const r=await fetch('/api/analytics/report',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({type:'form',context:trimmedContext})});
       let d:any={};
       try{d=await r.json();}catch{d={error:`Server returned status ${r.status}. Check your API keys in .env`};}
       if(!r.ok)setReportText(d.error||`Request failed (${r.status}). Ensure GROQ_API_KEY, GEMINI_API_KEY, or ANTHROPIC_API_KEY is set.`);
@@ -1270,7 +1276,14 @@ function DatasetAnalysis({dsData,dsId}:{dsData:any;dsId:string}){
   const genFullReport=async()=>{
     setShowReport(true);setReportLoading(true);setReportText('');
     try{
-      const r=await fetch('/api/analytics/report',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({type:'dataset',context:dsData})});
+      // Trim context to avoid token limit issues with large datasets
+      const trimmedContext = dsData ? {
+        ...dsData,
+        preview: Array.isArray(dsData.preview) ? dsData.preview.slice(0, 10) : dsData.preview,
+        rows: Array.isArray(dsData.rows) ? dsData.rows.slice(0, 10) : dsData.rows,
+        data: Array.isArray(dsData.data) ? dsData.data.slice(0, 10) : dsData.data,
+      } : dsData;
+      const r=await fetch('/api/analytics/report',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({type:'dataset',context:trimmedContext})});
       let d:any={};
       try{d=await r.json();}catch{d={error:`Server returned status ${r.status}. Check your API keys in .env`};}
       if(!r.ok)setReportText(d.error||`Request failed (${r.status}). Ensure GROQ_API_KEY, GEMINI_API_KEY, or ANTHROPIC_API_KEY is set.`);
