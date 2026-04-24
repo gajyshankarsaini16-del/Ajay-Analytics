@@ -11,7 +11,7 @@ async function callGroq(system: string, user: string) {
     signal: controller.signal,
     headers: {
       'Content-Type': 'application/json',
-      'Authorization': `Bearer ${process.env.GROQ_API_KEY}`,
+      'Authorization': `Bearer ${process.env.GROQ_REPORT_API_KEY || process.env.GROQ_API_KEY}`,
     },
     body: JSON.stringify({
       model: 'llama-3.3-70b-versatile',
