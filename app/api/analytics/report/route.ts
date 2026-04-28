@@ -2,9 +2,68 @@ export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
 import { NextResponse } from 'next/server';
 
-// ── Groq caller with retry on rate limit ──
+// ── Context ko trim karo - sirf summary bhejo, poora JSON nahi ──
+function trimContext(context: any, type: string): string {
+  try {
+    if (type === 'dataset') {
+      const safe = {
+        fileName: context.fileName || 'Dataset',
+        rowCount: context.rowCount,
+        columnCount: context.columnCount,
+        dataQuality: context.dataQuality,
+        columns: (context.columns || []).slice(0, 20).map((c: any) => ({
+          name: c.name,
+          type: c.type,
+          missing: c.missing,
+          unique: c.uniqueCount,
+          ...(c.type === 'numeric' ? {
+            mean: c.mean?.toFixed(2),
+            min: c.min,
+            max: c.max,
+            std: c.std?.toFixed(2),
+          } : {}),
+          ...(c.type === 'categorical' ? {
+            topValues: (c.topValues || []).slice(0, 5),
+          } : {}),
+        })),
+        sampleRows: (context.sampleRows || context.rows || []).slice(0, 5),
+      };
+      return JSON.stringify(safe, null, 1);
+    }
+    if (type === 'form') {
+      const safe = {
+        formTitle: context.formTitle || context.title || 'Form',
+        totalResponses: context.totalResponses || context.totalSubmissions,
+        questions: (context.questions || []).slice(0, 15).map((q: any) => ({
+          question: q.question || q.title,
+          type: q.type,
+          totalAnswers: q.totalAnswers,
+          chartData: (q.chartData || q.options || []).slice(0, 8).map((d: any) => ({
+            name: d.name || d.label,
+            value: d.value || d.count,
+            percentage: d.percentage,
+          })),
+        })),
+      };
+      return JSON.stringify(safe, null, 1);
+    }
+    const str = JSON.stringify(context, null, 1);
+    return str.length > 8000 ? str.slice(0, 8000) + '\n... (truncated)' : str;
+  } catch {
+    return JSON.stringify(context).slice(0, 5000);
+  }
+}
+
+// ── Gemini caller ──
+async function callGemini(prompt: string) {
+  const { GoogleGenAI } = await import('@google/genai');
+  const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || '' });
+  const r = await ai.models.generateContent({ model: 'gemini-2.5-flash', contents: prompt });
+  return r.text || '';
+}
+
+// ── Groq caller with retry + multi-key rotation ──
 async function callGroq(system: string, user: string) {
-  // Multiple keys support - rotate karo
   const keys = [
     process.env.GROQ_REPORT_API_KEY,
     process.env.GROQ_API_KEY,
@@ -14,11 +73,10 @@ async function callGroq(system: string, user: string) {
 
   if (keys.length === 0) throw new Error('No Groq key found');
 
-  // Har key try karo
   for (const key of keys) {
     for (let attempt = 0; attempt < 3; attempt++) {
       const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 50000);
+      const timeout = setTimeout(() => controller.abort(), 45000);
       try {
         const r = await fetch('https://api.groq.com/openai/v1/chat/completions', {
           method: 'POST',
@@ -37,36 +95,24 @@ async function callGroq(system: string, user: string) {
           }),
         });
         clearTimeout(timeout);
-
-        // Rate limit aaya - wait karke next attempt
         if (r.status === 429) {
-          const waitMs = (attempt + 1) * 3000; // 3s, 6s, 9s
-          console.warn(`[Groq] Rate limit on key ...${key.slice(-4)}, waiting ${waitMs}ms`);
+          const waitMs = (attempt + 1) * 3000;
+          console.warn(`[Groq] Rate limit, waiting ${waitMs}ms`);
           await new Promise(res => setTimeout(res, waitMs));
           continue;
         }
-
         if (!r.ok) throw new Error(`Groq error: ${r.status}`);
         const d = await r.json();
         return d.choices?.[0]?.message?.content || '';
-
       } catch (e: any) {
         clearTimeout(timeout);
         if (e.name === 'AbortError') throw new Error('Groq timeout');
-        if (attempt === 2) throw e; // Last attempt failed
+        if (attempt === 2) throw e;
         await new Promise(res => setTimeout(res, 2000));
       }
     }
   }
   throw new Error('All Groq keys exhausted');
-}
-
-// ── Gemini caller ──
-async function callGemini(prompt: string) {
-  const { GoogleGenAI } = await import('@google/genai');
-  const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || '' });
-  const r = await ai.models.generateContent({ model: 'gemini-2.5-flash', contents: prompt });
-  return r.text || '';
 }
 
 // ── Claude caller ──
@@ -90,19 +136,16 @@ async function callClaude(system: string, user: string) {
   return d.content?.[0]?.text || '';
 }
 
-// ── Smart AI caller: Gemini PEHLE (zyada limit), phir Groq, phir Claude ──
+// ── Priority: Gemini → Groq → Claude ──
 async function callAI(system: string, prompt: string): Promise<string> {
-  // 1. Gemini pehle try karo - 1M tokens/day free, bade data ke liye best
   if (process.env.GEMINI_API_KEY) {
     try { return await callGemini(`${system}\n\n${prompt}`); }
-    catch (e) { console.error('[Gemini failed, trying Groq]', e); }
+    catch (e) { console.error('[Gemini failed]', e); }
   }
-  // 2. Groq fallback - retry + multi-key support ke saath
   if (process.env.GROQ_API_KEY || process.env.GROQ_REPORT_API_KEY) {
     try { return await callGroq(system, prompt); }
-    catch (e) { console.error('[Groq failed, trying Claude]', e); }
+    catch (e) { console.error('[Groq failed]', e); }
   }
-  // 3. Claude last resort
   if (process.env.ANTHROPIC_API_KEY) {
     try { return await callClaude(system, prompt); }
     catch (e) { console.error('[Claude failed]', e); }
@@ -117,79 +160,79 @@ export async function POST(request: Request) {
 
     const SYSTEM = `You are a senior data analyst writing a professional analytics report.
 Be specific, use actual numbers from the data, and provide actionable insights.
-Format your response in clean markdown with proper headings.`;
+Format your response in clean markdown with proper headings.
+Keep response concise and under 1200 words.`;
+
+    // ✅ Context trim karo - 504 timeout fix
+    const trimmedContext = trimContext(context, type);
 
     let prompt = '';
 
     if (type === 'dataset') {
-      prompt = `
-Generate a complete professional analytics report for this dataset.
+      prompt = `Generate a professional analytics report for this dataset summary:
 
-Dataset: ${JSON.stringify(context, null, 2)}
+${trimmedContext}
 
-Write the following sections:
+Write these sections (keep each concise):
 
 ## Executive Summary
-2-3 sentences covering dataset scale, key purpose, and most important finding.
+2-3 sentences: dataset scale, purpose, top finding.
 
 ## Dataset Overview
-- Total records, columns, data types breakdown
-- Data quality assessment (missing values, outliers)
+Records, columns, data types, data quality.
 
 ## Key Statistical Findings
-Use actual numbers. Cover each numeric column's mean, range, and notable patterns.
-Cover each categorical column's distribution and dominant values.
+Important numbers from numeric and categorical columns.
 
 ## Top Insights
-Numbered list of 6-8 most important business insights drawn from the data.
-Be specific — include numbers, percentages, comparisons.
+6-8 numbered business insights with actual numbers.
 
 ## Correlations & Relationships
-Highlight 2-3 notable relationships between columns and what they imply.
+2-3 notable column relationships.
 
 ## Recommendations
-4-5 specific, actionable recommendations based on the data findings.
+4-5 actionable recommendations.
 
 ## Conclusion
-1 paragraph summarizing the overall picture and next steps.
-`;
+1 paragraph summary and next steps.`;
+
     } else if (type === 'form') {
-      prompt = `
-Generate a complete professional analytics report for this form response data.
+      prompt = `Generate a professional analytics report for this form data:
 
-Form Data: ${JSON.stringify(context, null, 2)}
+${trimmedContext}
 
-Write the following sections:
+Write these sections (keep each concise):
 
 ## Executive Summary
-Overview of form purpose, total responses, and top-level finding.
+Form purpose, total responses, top finding.
 
 ## Response Overview
-- Total submissions, completion rate, most/least answered questions
-- Response quality assessment
+Submissions, completion rate, response quality.
 
 ## Question-by-Question Analysis
-For each question: what was asked, what the dominant answer was, and what it means.
-Use actual percentages and counts.
+Each question: what asked, dominant answer, meaning. Use percentages.
 
 ## Key Patterns & Trends
-What patterns emerge across questions? Any surprising findings?
+Cross-question patterns and surprising findings.
 
 ## Recommendations
-4-5 specific actions based on the response data.
+4-5 specific actions from response data.
 
 ## Conclusion
-Summary and next steps.
-`;
+Summary and next steps.`;
+
     } else {
-      prompt = `Analyze this data and write a full professional report:\n${JSON.stringify(context, null, 2)}`;
+      prompt = `Analyze this data and write a concise professional report:\n${trimmedContext}`;
     }
 
     const report = await callAI(SYSTEM, prompt);
-
     return NextResponse.json({ report });
+
   } catch (error: any) {
     console.error('[Report API Error]', error);
-    return NextResponse.json({ error: error.message || 'Report generation failed' }, { status: 500 });
+    return NextResponse.json(
+      { error: error.message || 'Report generation failed' },
+      { status: 500 }
+    );
   }
 }
