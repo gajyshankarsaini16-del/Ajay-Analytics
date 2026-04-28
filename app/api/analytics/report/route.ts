@@ -2,32 +2,66 @@ export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
 import { NextResponse } from 'next/server';
 
-// ── Smart AI caller (same pattern as your existing analyze/route.ts) ──
+// ── Groq caller with retry on rate limit ──
 async function callGroq(system: string, user: string) {
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 50000);
-  const r = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-    method: 'POST',
-    signal: controller.signal,
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${process.env.GROQ_REPORT_API_KEY || process.env.GROQ_API_KEY}`,
-    },
-    body: JSON.stringify({
-      model: 'llama-3.3-70b-versatile',
-      max_tokens: 1500,
-      messages: [
-        { role: 'system', content: system },
-        { role: 'user', content: user },
-      ],
-    }),
-  });
-  clearTimeout(timeout);
-  if (!r.ok) throw new Error(`Groq error: ${r.status}`);
-  const d = await r.json();
-  return d.choices?.[0]?.message?.content || '';
+  // Multiple keys support - rotate karo
+  const keys = [
+    process.env.GROQ_REPORT_API_KEY,
+    process.env.GROQ_API_KEY,
+    process.env.GROQ_API_KEY_2,
+    process.env.GROQ_API_KEY_3,
+  ].filter(Boolean) as string[];
+
+  if (keys.length === 0) throw new Error('No Groq key found');
+
+  // Har key try karo
+  for (const key of keys) {
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 50000);
+      try {
+        const r = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+          method: 'POST',
+          signal: controller.signal,
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${key}`,
+          },
+          body: JSON.stringify({
+            model: 'llama-3.3-70b-versatile',
+            max_tokens: 1500,
+            messages: [
+              { role: 'system', content: system },
+              { role: 'user', content: user },
+            ],
+          }),
+        });
+        clearTimeout(timeout);
+
+        // Rate limit aaya - wait karke next attempt
+        if (r.status === 429) {
+          const waitMs = (attempt + 1) * 3000; // 3s, 6s, 9s
+          console.warn(`[Groq] Rate limit on key ...${key.slice(-4)}, waiting ${waitMs}ms`);
+          await new Promise(res => setTimeout(res, waitMs));
+          continue;
+        }
+
+        if (!r.ok) throw new Error(`Groq error: ${r.status}`);
+        const d = await r.json();
+        return d.choices?.[0]?.message?.content || '';
+
+      } catch (e: any) {
+        clearTimeout(timeout);
+        if (e.name === 'AbortError') throw new Error('Groq timeout');
+        if (attempt === 2) throw e; // Last attempt failed
+        await new Promise(res => setTimeout(res, 2000));
+      }
+    }
+  }
+  throw new Error('All Groq keys exhausted');
 }
 
+// ── Gemini caller ──
 async function callGemini(prompt: string) {
   const { GoogleGenAI } = await import('@google/genai');
   const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || '' });
@@ -35,6 +69,7 @@ async function callGemini(prompt: string) {
   return r.text || '';
 }
 
+// ── Claude caller ──
 async function callClaude(system: string, user: string) {
   const r = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
@@ -55,21 +90,27 @@ async function callClaude(system: string, user: string) {
   return d.content?.[0]?.text || '';
 }
 
+// ── Smart AI caller: Gemini PEHLE (zyada limit), phir Groq, phir Claude ──
 async function callAI(system: string, prompt: string): Promise<string> {
-  if (process.env.GROQ_API_KEY) {
-    try { return await callGroq(system, prompt); } catch (e) { console.error('[Groq]', e); }
-  }
+  // 1. Gemini pehle try karo - 1M tokens/day free, bade data ke liye best
   if (process.env.GEMINI_API_KEY) {
-    try { return await callGemini(`${system}\n\n${prompt}`); } catch (e) { console.error('[Gemini]', e); }
+    try { return await callGemini(`${system}\n\n${prompt}`); }
+    catch (e) { console.error('[Gemini failed, trying Groq]', e); }
   }
-  if (process.env.GROQ_REPORT_API_KEY || process.env.GROQ_API_KEY) {
-    try { return await callClaude(system, prompt); } catch (e) { console.error('[Claude]', e); }
+  // 2. Groq fallback - retry + multi-key support ke saath
+  if (process.env.GROQ_API_KEY || process.env.GROQ_REPORT_API_KEY) {
+    try { return await callGroq(system, prompt); }
+    catch (e) { console.error('[Groq failed, trying Claude]', e); }
+  }
+  // 3. Claude last resort
+  if (process.env.ANTHROPIC_API_KEY) {
+    try { return await callClaude(system, prompt); }
+    catch (e) { console.error('[Claude failed]', e); }
   }
   throw new Error('No AI API key configured.');
 }
 
 // ── POST /api/analytics/report ──
-// Body: { context: any, type: 'dataset' | 'form' }
 export async function POST(request: Request) {
   try {
     const { context, type } = await request.json();
